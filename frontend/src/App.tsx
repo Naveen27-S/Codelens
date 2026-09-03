@@ -1,16 +1,15 @@
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Terminal, Code2, Zap, BrainCircuit, PlayCircle, LogIn, LogOut, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { DashboardLayout } from './components/DashboardLayout';
-import { DashboardPage } from './pages/DashboardPage';
-import { ActivityHistoryPage } from './pages/ActivityHistoryPage';
 import { EditorPage } from './pages/EditorPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { DashboardPage } from './pages/DashboardPage';
 import { DemoModal } from './components/demo/DemoModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AppLayout } from './components/AppLayout';
 import { RegisterPage } from './pages/RegisterPage';
 import { SignInPage } from './pages/SignInPage';
 
@@ -218,41 +217,38 @@ function App() {
             {/* Legacy /login → /signin redirect */}
             <Route path="/login" element={<SignInPage />} />
 
-            {/* Protected routes */}
-            <Route element={<DashboardLayout />}>
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/dashboard/activity"
-                element={
-                  <ProtectedRoute>
-                    <ActivityHistoryPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/editor"
-                element={
-                  <ProtectedRoute>
+            {/* Protected routes — all rendered inside the shared AppLayout sidebar */}
+            <Route
+              path="/editor"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
                     <EditorPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
                     <SettingsPage />
-                  </ProtectedRoute>
-                }
-              />
-            </Route>
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            {/* Dashboard — full coding-practice analytics page */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <DashboardPage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </SettingsProvider>
       </AuthProvider>

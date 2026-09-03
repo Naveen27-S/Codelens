@@ -18,6 +18,7 @@ from ..schemas.dashboard import (
     RecentVisualizationResponse,
     LanguageProgressResponse,
     RecommendationResponse,
+    CalendarActivityResponse,
 )
 from ..services import activity_service
 
@@ -76,6 +77,16 @@ def get_daily_activity_breakdown(
     return activity_service.get_daily_activity(db=db, user_id=current_user.id, days=days)
 
 
+@router.get("/activity/calendar", response_model=CalendarActivityResponse)
+def get_calendar_activity(
+    days: int = Query(180, ge=7, le=365),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return per-day activity counts for the last N days for the heatmap calendar."""
+    return activity_service.get_calendar_activity(user_id=current_user.id, days=days, db=db)
+
+
 @router.get("/streak", response_model=StreakResponse)
 def get_user_coding_streak(
     db: Session = Depends(get_db),
@@ -106,24 +117,21 @@ def get_dashboard_summary_stats(
 @router.get("/recent-programs", response_model=List[RecentProgramResponse])
 def get_recent_programs(
     limit: int = Query(5, ge=1, le=20),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Retrieve the user's recently saved/edited programs from CodeHistory."""
-    programs = (
-        db.query(CodeHistory)
-        .filter(CodeHistory.user_id == current_user.id)
-        .order_by(CodeHistory.updated_at.desc(), CodeHistory.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    """Retrieve the user's recently saved/edited programs from MongoDB."""
+    from ..database.mongodb import get_mongodb
+    mongo_db = get_mongodb()
+    if mongo_db is None:
+        return []
+    programs = list(mongo_db.programs.find({"user_id": current_user.id}).sort("updated_at", -1).limit(limit))
     return [
         RecentProgramResponse(
-            id=p.id,
-            title=p.title,
-            language=p.language,
-            lastEdited=(p.updated_at or p.created_at).isoformat() if (p.updated_at or p.created_at) else "recently",
-            sourceCode=p.source_code,
+            id=p["program_id"],
+            title=p["name"],
+            language=p["language"],
+            lastEdited=p["updated_at"],
+            sourceCode=p.get("code")
         )
         for p in programs
     ]
@@ -132,34 +140,34 @@ def get_recent_programs(
 @router.get("/visualizations", response_model=List[RecentVisualizationResponse])
 def get_recent_visualizations(
     limit: int = Query(5, ge=1, le=20),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Retrieve recent visualizations executed by the user."""
-    from ..models.user_activity import UserActivity
-
-    activities = (
-        db.query(UserActivity)
-        .filter(
-            UserActivity.user_id == current_user.id,
-            UserActivity.activity_type.in_(["visualization_completed", "visualization"]),
-        )
-        .order_by(UserActivity.started_at.desc())
-        .limit(limit)
-        .all()
+    """Retrieve recent visualizations executed by the user from MongoDB."""
+    from ..database.mongodb import get_mongodb
+    from datetime import datetime
+    mongo_db = get_mongodb()
+    
+    activities = list(
+        mongo_db.activities.find({
+            "user_id": current_user.id,
+            "activity_type": {"$in": ["visualization_completed", "visualization"]}
+        }).sort("started_at", -1).limit(limit)
     )
 
     results = []
     for a in activities:
-        meta = a.metadata_json or {}
+        meta = a.get("metadata_json") or {}
+        started_at = a.get("started_at")
+        timestamp_str = started_at.isoformat() if isinstance(started_at, datetime) else str(started_at)
+        
         results.append(
             RecentVisualizationResponse(
-                id=a.id,
-                programName=a.program_name or a.title or "Algorithm",
-                language=a.language or "python",
+                id=str(a["_id"]),
+                programName=a.get("program_name") or a.get("title") or "Algorithm",
+                language=a.get("language") or "python",
                 steps=meta.get("steps", 12),
-                status=a.status or "completed",
-                timestamp=a.started_at.isoformat() if a.started_at else "recently",
+                status=a.get("status") or "completed",
+                timestamp=timestamp_str,
                 sourceCode=meta.get("source_code"),
                 mermaidExplanation=meta.get("mermaid_explanation"),
             )
@@ -169,17 +177,32 @@ def get_recent_visualizations(
 
 @router.get("/progress", response_model=List[LanguageProgressResponse])
 def get_learning_progress(
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Retrieve learning progress across languages and concepts based on user practice."""
-    from ..models.user_activity import UserActivity
+    """Retrieve learning progress across languages and concepts based on MongoDB activities."""
+    from ..database.mongodb import get_mongodb
+    mongo_db = get_mongodb()
 
-    # Count activities by language/topic
-    py_count = db.query(func.count(UserActivity.id)).filter(UserActivity.user_id == current_user.id, UserActivity.language.ilike("%python%")).scalar() or 0
-    java_count = db.query(func.count(UserActivity.id)).filter(UserActivity.user_id == current_user.id, UserActivity.language.ilike("%java%")).scalar() or 0
-    ds_count = db.query(func.count(UserActivity.id)).filter(UserActivity.user_id == current_user.id, UserActivity.topic.in_(["Arrays", "Linked Lists", "Stacks", "Queues", "Trees", "Graphs"])).scalar() or 0
-    algo_count = db.query(func.count(UserActivity.id)).filter(UserActivity.user_id == current_user.id, UserActivity.topic.in_(["Sorting", "Recursion", "Binary Search", "Dynamic Programming"])).scalar() or 0
+    py_count = mongo_db.activities.count_documents({
+        "user_id": current_user.id,
+        "language": {"$regex": "python", "$options": "i"}
+    })
+    java_count = mongo_db.activities.count_documents({
+        "user_id": current_user.id,
+        "language": {"$regex": "java", "$options": "i"}
+    })
+    
+    ds_topics = ["Arrays", "Linked Lists", "Stacks", "Queues", "Trees", "Graphs"]
+    ds_count = mongo_db.activities.count_documents({
+        "user_id": current_user.id,
+        "topic": {"$in": ds_topics}
+    })
+    
+    algo_topics = ["Sorting", "Recursion", "Binary Search", "Dynamic Programming"]
+    algo_count = mongo_db.activities.count_documents({
+        "user_id": current_user.id,
+        "topic": {"$in": algo_topics}
+    })
 
     return [
         LanguageProgressResponse(label="Python", percentage=min(100, max(25, py_count * 8)), color="bg-indigo-500"),

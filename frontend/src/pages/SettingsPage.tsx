@@ -1093,7 +1093,7 @@ export function SettingsPage() {
   const activeItem = NAV_ITEMS.find((n) => n.id === activeSection)!;
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-900 text-slate-300">
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900 text-slate-300">
       {/* Top header */}
       <div className="h-14 border-b border-slate-800 bg-slate-950 flex items-center px-6 shrink-0">
         <div>

@@ -12,3 +12,4 @@ pydantic-settings
 pydantic[email]
 docker
 google-generativeai
+pymongo

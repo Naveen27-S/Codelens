@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     # Other services
     GEMINI_API_KEY: str = ""
+    MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_DB: str = "codelens_db"
 
     # CORS — comma-separated string, parsed below
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

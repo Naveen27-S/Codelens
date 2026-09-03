@@ -18,7 +18,7 @@ class ActivityCreate(BaseModel):
 
 
 class ActivityResponse(BaseModel):
-    id: int
+    id: Union[int, str]
     user_id: int
     activity_type: str
     title: str
@@ -118,3 +118,13 @@ class RecommendationResponse(BaseModel):
     difficulty: str
     problems: int
     icon: str
+
+
+class CalendarDayItem(BaseModel):
+    date: str   # ISO date string e.g. "2026-08-01"
+    count: int  # total activities that day
+
+
+class CalendarActivityResponse(BaseModel):
+    days: List[CalendarDayItem]
+    max_count: int  # used for intensity normalization in the UI
