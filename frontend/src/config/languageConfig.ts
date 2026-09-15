@@ -14,46 +14,47 @@ export interface LanguageConfig {
 export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
   python: {
     id: 'python',
-    label: 'Python',
+    label: 'Python (Pyodide Wasm)',
     monacoLanguage: 'python',
     extension: '.py',
-    starterCode: '# Write your Python code here\n',
+    starterCode: `# Write your Python code here
+`,
   },
   java: {
     id: 'java',
-    label: 'Java',
+    label: 'Java (Client-Side Engine)',
     monacoLanguage: 'java',
     extension: '.java',
     starterCode: `public class Main {
     public static void main(String[] args) {
-
+        // Write your Java code here
     }
-}
-`,
-  },
-  c: {
-    id: 'c',
-    label: 'C',
-    monacoLanguage: 'c',
-    extension: '.c',
-    starterCode: `#include <stdio.h>
-
-int main() {
-
-    return 0;
 }
 `,
   },
   cpp: {
     id: 'cpp',
-    label: 'C++',
+    label: 'C++ (JSCPP Wasm Interpreter)',
     monacoLanguage: 'cpp',
     extension: '.cpp',
     starterCode: `#include <iostream>
 using namespace std;
 
 int main() {
+    // Write your C++ code here
+    return 0;
+}
+`,
+  },
+  c: {
+    id: 'c',
+    label: 'C (JSCPP Wasm Interpreter)',
+    monacoLanguage: 'c',
+    extension: '.c',
+    starterCode: `#include <stdio.h>
 
+int main() {
+    // Write your C code here
     return 0;
 }
 `,

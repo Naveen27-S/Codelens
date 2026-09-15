@@ -32,7 +32,7 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"]
 
 @app.get("/api/health", tags=["Health"])
 def health_check():
-    """Health check endpoint. Tests the MySQL connection."""
+    """Health check endpoint. Tests MySQL and MongoDB connections."""
     db_status = "connected"
     db_error = None
     try:
@@ -43,8 +43,22 @@ def health_check():
         db_status = "disconnected"
         db_error = str(e)
 
+    mongo_status = "connected"
+    mongo_error = None
+    try:
+        from .database.mongodb import get_mongodb
+        mdb = get_mongodb()
+        if mdb is None:
+            mongo_status = "disconnected"
+            mongo_error = "Could not establish MongoDB connection"
+    except Exception as me:
+        mongo_status = "disconnected"
+        mongo_error = str(me)
+
     return {
         "status": "ok",
         "database": db_status,
+        "mongodb": mongo_status,
         **({"error": db_error} if db_error else {}),
+        **({"mongo_error": mongo_error} if mongo_error else {}),
     }

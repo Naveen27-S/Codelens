@@ -7,7 +7,7 @@ import {
   FileText, HelpCircle, MessageSquare, X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useSettings, type AppSettings } from '../context/SettingsContext';
+import { useSettings, type AppSettings, ACCENT_COLORS, type AccentColor, type AnimationIntensity, type UITransitionSpeed } from '../context/SettingsContext';
 import axios from 'axios';
 import './SettingsPage.css';
 
@@ -289,61 +289,142 @@ function AppearanceSection() {
     saveTimer.current = setTimeout(() => setSavedKey(null), 2000);
   }, [updateSetting]);
 
-  const fontOptions = ['JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Source Code Pro'];
+  const fontOptions = ['JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Source Code Pro', 'Ubuntu Mono', 'IBM Plex Mono', 'Roboto Mono'];
+
+  const themeCards: { value: AppSettings['theme']; emoji: string; label: string; description: string }[] = [
+    { value: 'dark',   emoji: '🌙', label: 'Dark',           description: 'Easy on the eyes with deep backgrounds' },
+    { value: 'light',  emoji: '☀️', label: 'Light',          description: 'Crisp bright appearance for daylight' },
+    { value: 'system', emoji: '💻', label: 'System Default', description: 'Automatically follows your OS preference' },
+  ];
+
+  const accentEntries = Object.entries(ACCENT_COLORS) as [AccentColor, typeof ACCENT_COLORS[AccentColor]][];
+  const intensityOptions: { value: AnimationIntensity; label: string; desc: string }[] = [
+    { value: 'none',   label: 'None',   desc: 'No animations' },
+    { value: 'subtle', label: 'Subtle', desc: 'Minimal transitions' },
+    { value: 'full',   label: 'Full',   desc: 'Rich micro-animations' },
+  ];
+  const transitionSpeeds: { value: UITransitionSpeed; label: string }[] = [
+    { value: 'instant', label: 'Instant' },
+    { value: 'fast',    label: 'Fast' },
+    { value: 'normal',  label: 'Normal' },
+    { value: 'relaxed', label: 'Relaxed' },
+  ];
 
   return (
     <>
-      <SectionCard title="Theme">
-        <div className="space-y-2">
-          {(['dark', 'light', 'system'] as const).map((t) => (
-            <label
-              key={t}
-              className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
-                settings.theme === t
-                  ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
-                  : 'border-transparent hover:bg-slate-800/50 text-slate-300'
-              }`}
-            >
-              <input
-                type="radio"
-                name="theme"
-                value={t}
-                checked={settings.theme === t}
-                onChange={() => save('theme', t)}
-                className="accent-indigo-500"
-              />
-              <span className="text-sm font-medium capitalize">{t === 'system' ? 'System default' : t === 'dark' ? '🌙 Dark' : '☀️ Light'}</span>
-              {settings.theme === t && <Check className="w-4 h-4 ml-auto" />}
-            </label>
-          ))}
+      {/* ── Theme ─────────────────────────────────────────────────────────── */}
+      <SectionCard title="Theme" description="Choose how CodeLens looks to you.">
+        <div className="appearance-theme-grid">
+          {themeCards.map((t) => {
+            const isActive = settings.theme === t.value;
+            return (
+              <button
+                key={t.value}
+                id={`appearance-theme-${t.value}`}
+                onClick={() => save('theme', t.value)}
+                className={`appearance-theme-card ${isActive ? 'active' : ''}`}
+              >
+                {/* Color preview strip */}
+                <div className={`appearance-theme-preview ${t.value === 'dark' ? 'dark-preview' : t.value === 'light' ? 'light-preview' : 'system-preview'}`}>
+                  <div className="appearance-theme-preview-bar" />
+                  <div className="appearance-theme-preview-dots">
+                    <span /><span /><span />
+                  </div>
+                  <div className="appearance-theme-preview-lines">
+                    <span /><span /><span />
+                  </div>
+                </div>
+                <div className="appearance-theme-info">
+                  <span className="appearance-theme-emoji">{t.emoji}</span>
+                  <div>
+                    <p className="appearance-theme-label">{t.label}</p>
+                    <p className="appearance-theme-desc">{t.description}</p>
+                  </div>
+                </div>
+                {isActive && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="appearance-theme-check"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </motion.div>
+                )}
+              </button>
+            );
+          })}
         </div>
-        <p className="text-xs text-slate-600 mt-3">Light/System themes are prepared for future theming support. CodeLens defaults to dark mode.</p>
+        <SavedBadge show={savedKey === 'theme'} />
       </SectionCard>
 
-      <SectionCard title="Typography">
+      {/* ── Accent Color ──────────────────────────────────────────────────── */}
+      <SectionCard title="Accent Color" description="Personalize buttons, highlights, and interactive elements.">
+        <div className="appearance-accent-grid">
+          {accentEntries.map(([key, color]) => {
+            const isActive = settings.accentColor === key;
+            return (
+              <button
+                key={key}
+                id={`appearance-accent-${key}`}
+                onClick={() => save('accentColor', key)}
+                className={`appearance-accent-swatch ${isActive ? 'active' : ''}`}
+                title={color.name}
+              >
+                <span
+                  className="appearance-accent-dot"
+                  style={{ background: color.hex, boxShadow: isActive ? `0 0 0 3px rgba(${color.rgb}, 0.25)` : 'none' }}
+                />
+                <span className="appearance-accent-label">{color.name}</span>
+                {isActive && (
+                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="appearance-accent-check">
+                    <Check className="w-3 h-3" />
+                  </motion.span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <SavedBadge show={savedKey === 'accentColor'} />
+      </SectionCard>
+
+      {/* ── Typography ────────────────────────────────────────────────────── */}
+      <SectionCard title="Typography" description="Adjust the editor's text appearance.">
         <div className="space-y-5">
+          {/* Font Size */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-medium text-slate-200">Editor Font Size</label>
-              <span className="text-sm font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-lg">{settings.editorFontSize}px</span>
+              <span className="text-sm font-mono bg-indigo-500/10 px-2.5 py-0.5 rounded-lg" style={{ color: 'var(--accent-color, #818cf8)' }}>{settings.editorFontSize}px</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-500 shrink-0">12px</span>
+              <button
+                className="appearance-size-btn"
+                onClick={() => settings.editorFontSize > 10 && save('editorFontSize', settings.editorFontSize - 1)}
+                disabled={settings.editorFontSize <= 10}
+              >A−</button>
               <input
                 id="appearance-fontsize-slider"
                 type="range"
-                min={12}
-                max={24}
+                min={10}
+                max={28}
                 step={1}
                 value={settings.editorFontSize}
                 onChange={(e) => save('editorFontSize', parseInt(e.target.value))}
                 className="settings-slider flex-1"
               />
-              <span className="text-xs text-slate-500 shrink-0">24px</span>
+              <button
+                className="appearance-size-btn"
+                onClick={() => settings.editorFontSize < 28 && save('editorFontSize', settings.editorFontSize + 1)}
+                disabled={settings.editorFontSize >= 28}
+              >A+</button>
+            </div>
+            <div className="flex justify-between text-xs text-slate-600 mt-1 px-1">
+              <span>10px</span><span>28px</span>
             </div>
             <SavedBadge show={savedKey === 'editorFontSize'} />
           </div>
 
+          {/* Font Family */}
           <div className="border-t border-slate-800 pt-4">
             <label className="block text-sm font-medium text-slate-200 mb-2">Font Family</label>
             <select
@@ -356,13 +437,103 @@ function AppearanceSection() {
             </select>
             <SavedBadge show={savedKey === 'editorFontFamily'} />
           </div>
+
+          {/* Live Preview */}
+          <div className="border-t border-slate-800 pt-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Live Preview</p>
+            <div className="appearance-font-preview" style={{ fontFamily: `'${settings.editorFontFamily}', 'Fira Code', monospace`, fontSize: `${settings.editorFontSize}px` }}>
+              <div className="appearance-preview-header">
+                <span className="appearance-preview-dot" style={{ background: '#ef4444' }} />
+                <span className="appearance-preview-dot" style={{ background: '#eab308' }} />
+                <span className="appearance-preview-dot" style={{ background: '#22c55e' }} />
+                <span className="appearance-preview-title">preview.py</span>
+              </div>
+              <div className="appearance-preview-code">
+                <span className="appearance-preview-ln">1</span><span style={{ color: '#f472b6' }}>def</span> <span style={{ color: '#60a5fa' }}>hello</span>(name):
+                <br />
+                <span className="appearance-preview-ln">2</span>    <span style={{ color: '#f472b6' }}>return</span> <span style={{ color: '#a5d6a7' }}>f"Hello, {'{name}'}!"</span>
+                <br />
+                <span className="appearance-preview-ln">3</span>
+                <br />
+                <span className="appearance-preview-ln">4</span>result = hello(<span style={{ color: '#a5d6a7' }}>"World"</span>)
+              </div>
+            </div>
+          </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Interface">
-        <SettingRow label="Interface Animations" description="Enable smooth transitions and micro-animations.">
-          <Toggle id="appearance-animations" checked={settings.animationsEnabled} onChange={(v) => save('animationsEnabled', v)} />
-        </SettingRow>
+      {/* ── Interface ─────────────────────────────────────────────────────── */}
+      <SectionCard title="Interface" description="Control animations and transitions.">
+        <div className="divide-y divide-slate-800/60">
+          {/* Main toggle */}
+          <SettingRow label="Interface Animations" description="Enable smooth transitions and micro-animations throughout the app.">
+            <Toggle id="appearance-animations" checked={settings.animationsEnabled} onChange={(v) => save('animationsEnabled', v)} />
+          </SettingRow>
+
+          {/* Animation Intensity */}
+          <AnimatePresence>
+            {settings.animationsEnabled && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="py-4">
+                  <label className="block text-sm font-medium text-slate-200 mb-3">Animation Intensity</label>
+                  <div className="appearance-intensity-grid">
+                    {intensityOptions.map((opt) => {
+                      const isActive = settings.animationIntensity === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          id={`appearance-intensity-${opt.value}`}
+                          className={`appearance-intensity-card ${isActive ? 'active' : ''}`}
+                          onClick={() => save('animationIntensity', opt.value)}
+                        >
+                          <span className="appearance-intensity-icon">
+                            {opt.value === 'none' ? '⏸️' : opt.value === 'subtle' ? '〰️' : '✨'}
+                          </span>
+                          <span className="appearance-intensity-label">{opt.label}</span>
+                          <span className="appearance-intensity-desc">{opt.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <SavedBadge show={savedKey === 'animationIntensity'} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* UI Transition Speed */}
+          <div className="py-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-200">Transition Speed</label>
+                <p className="text-xs text-slate-500 mt-0.5">How fast UI elements animate on screen.</p>
+              </div>
+            </div>
+            <div className="settings-segmented">
+              {transitionSpeeds.map((s) => (
+                <button
+                  key={s.value}
+                  id={`appearance-speed-${s.value}`}
+                  className={`settings-segmented-btn ${settings.uiTransitionSpeed === s.value ? 'active' : ''}`}
+                  onClick={() => save('uiTransitionSpeed', s.value)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <SavedBadge show={savedKey === 'uiTransitionSpeed'} />
+          </div>
+
+          {/* Reduced Motion */}
+          <SettingRow label="Reduce Motion" description="Honor accessibility preference for reduced motion. Overrides animation intensity.">
+            <Toggle id="appearance-reduced-motion" checked={settings.reducedMotion} onChange={(v) => save('reducedMotion', v)} />
+          </SettingRow>
+        </div>
       </SectionCard>
     </>
   );
@@ -617,7 +788,6 @@ function ExecutionSection() {
 
   const languages = [
     { value: 'python', label: 'Python' },
-    { value: 'javascript', label: 'JavaScript' },
     { value: 'java', label: 'Java' },
     { value: 'cpp', label: 'C++' },
   ];
