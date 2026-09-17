@@ -7,7 +7,7 @@ import {
   FileText, HelpCircle, MessageSquare, X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useSettings, type AppSettings, ACCENT_COLORS, type AccentColor, type AnimationIntensity, type UITransitionSpeed } from '../context/SettingsContext';
+import { useSettings, type AppSettings, ACCENT_COLORS, type AccentColor, type AnimationIntensity } from '../context/SettingsContext';
 import axios from 'axios';
 import './SettingsPage.css';
 
@@ -292,9 +292,8 @@ function AppearanceSection() {
   const fontOptions = ['JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Source Code Pro', 'Ubuntu Mono', 'IBM Plex Mono', 'Roboto Mono'];
 
   const themeCards: { value: AppSettings['theme']; emoji: string; label: string; description: string }[] = [
-    { value: 'dark',   emoji: '🌙', label: 'Dark',           description: 'Easy on the eyes with deep backgrounds' },
-    { value: 'light',  emoji: '☀️', label: 'Light',          description: 'Crisp bright appearance for daylight' },
-    { value: 'system', emoji: '💻', label: 'System Default', description: 'Automatically follows your OS preference' },
+    { value: 'dark',  emoji: '🌙', label: 'Dark',  description: 'Easy on the eyes with deep backgrounds' },
+    { value: 'light', emoji: '☀️', label: 'Light', description: 'Crisp bright appearance for daylight' },
   ];
 
   const accentEntries = Object.entries(ACCENT_COLORS) as [AccentColor, typeof ACCENT_COLORS[AccentColor]][];
@@ -302,12 +301,6 @@ function AppearanceSection() {
     { value: 'none',   label: 'None',   desc: 'No animations' },
     { value: 'subtle', label: 'Subtle', desc: 'Minimal transitions' },
     { value: 'full',   label: 'Full',   desc: 'Rich micro-animations' },
-  ];
-  const transitionSpeeds: { value: UITransitionSpeed; label: string }[] = [
-    { value: 'instant', label: 'Instant' },
-    { value: 'fast',    label: 'Fast' },
-    { value: 'normal',  label: 'Normal' },
-    { value: 'relaxed', label: 'Relaxed' },
   ];
 
   return (
@@ -479,8 +472,19 @@ function AppearanceSection() {
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className="py-4">
-                  <label className="block text-sm font-medium text-slate-200 mb-3">Animation Intensity</label>
+              <div className="py-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-200">Animation Intensity</label>
+                      <p className="text-xs text-slate-500 mt-0.5">Click a level to preview and apply it live.</p>
+                    </div>
+                    {/* Live status badge */}
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full border border-slate-700 text-slate-400 bg-slate-900/60">
+                      Active: <span className="text-accent font-bold" style={{ color: 'var(--accent-color)' }}>
+                        {settings.animationIntensity.charAt(0).toUpperCase() + settings.animationIntensity.slice(1)}
+                      </span>
+                    </span>
+                  </div>
                   <div className="appearance-intensity-grid">
                     {intensityOptions.map((opt) => {
                       const isActive = settings.animationIntensity === opt.value;
@@ -491,48 +495,52 @@ function AppearanceSection() {
                           className={`appearance-intensity-card ${isActive ? 'active' : ''}`}
                           onClick={() => save('animationIntensity', opt.value)}
                         >
-                          <span className="appearance-intensity-icon">
-                            {opt.value === 'none' ? '⏸️' : opt.value === 'subtle' ? '〰️' : '✨'}
-                          </span>
-                          <span className="appearance-intensity-label">{opt.label}</span>
-                          <span className="appearance-intensity-desc">{opt.desc}</span>
+                          {/* Live animation preview area */}
+                          <div className={`intensity-preview-box intensity-preview-${opt.value}`}>
+                            {opt.value === 'none' && (
+                              <div className="intensity-none-bars">
+                                <span /><span /><span />
+                              </div>
+                            )}
+                            {opt.value === 'subtle' && (
+                              <div className="intensity-subtle-bars">
+                                <span className="subtle-bar-1" /><span className="subtle-bar-2" /><span className="subtle-bar-3" />
+                              </div>
+                            )}
+                            {opt.value === 'full' && (
+                              <div className="intensity-full-dots">
+                                <span className="full-dot-1" /><span className="full-dot-2" /><span className="full-dot-3" />
+                              </div>
+                            )}
+                          </div>
+                          {/* Icon + label row */}
+                          <div className="intensity-card-footer">
+                            <span className="appearance-intensity-icon">
+                              {opt.value === 'none' ? '⏸️' : opt.value === 'subtle' ? '〰️' : '✨'}
+                            </span>
+                            <div className="intensity-card-text">
+                              <span className="appearance-intensity-label">{opt.label}</span>
+                              <span className="appearance-intensity-desc">{opt.desc}</span>
+                            </div>
+                            {isActive && (
+                              <motion.span
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                className="intensity-active-dot"
+                              />
+                            )}
+                          </div>
                         </button>
                       );
                     })}
                   </div>
                   <SavedBadge show={savedKey === 'animationIntensity'} />
                 </div>
+
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* UI Transition Speed */}
-          <div className="py-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-200">Transition Speed</label>
-                <p className="text-xs text-slate-500 mt-0.5">How fast UI elements animate on screen.</p>
-              </div>
-            </div>
-            <div className="settings-segmented">
-              {transitionSpeeds.map((s) => (
-                <button
-                  key={s.value}
-                  id={`appearance-speed-${s.value}`}
-                  className={`settings-segmented-btn ${settings.uiTransitionSpeed === s.value ? 'active' : ''}`}
-                  onClick={() => save('uiTransitionSpeed', s.value)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-            <SavedBadge show={savedKey === 'uiTransitionSpeed'} />
-          </div>
-
-          {/* Reduced Motion */}
-          <SettingRow label="Reduce Motion" description="Honor accessibility preference for reduced motion. Overrides animation intensity.">
-            <Toggle id="appearance-reduced-motion" checked={settings.reducedMotion} onChange={(v) => save('reducedMotion', v)} />
-          </SettingRow>
         </div>
       </SectionCard>
     </>

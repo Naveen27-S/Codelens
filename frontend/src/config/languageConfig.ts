@@ -17,7 +17,28 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
     label: 'Python (Pyodide Wasm)',
     monacoLanguage: 'python',
     extension: '.py',
-    starterCode: `# Write your Python code here
+    starterCode: `def main(a, b):
+    # Main function taking input arguments and returning a value
+    return a + b
+
+if __name__ == "__main__":
+    # Take input arguments from STDIN (or use defaults if no input provided)
+    try:
+        raw_input_data = input().strip()
+        if raw_input_data:
+            tokens = [int(x) if x.lstrip('-').isdigit() else x for x in raw_input_data.split()]
+            a = tokens[0] if len(tokens) > 0 else 10
+            b = tokens[1] if len(tokens) > 1 else 20
+        else:
+            a, b = 10, 20
+    except Exception:
+        a, b = 10, 20
+
+    # Call main function with input arguments
+    result = main(a, b)
+
+    # Print the returned value from the main function
+    print("Returned value from main():", result)
 `,
   },
   java: {
@@ -25,9 +46,32 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
     label: 'Java (Client-Side Engine)',
     monacoLanguage: 'java',
     extension: '.java',
-    starterCode: `public class Main {
+    starterCode: `import java.util.Scanner;
+
+public class Main {
+    // Main function taking input arguments and returning a value
+    public static int mainFunction(int a, int b) {
+        return a + b;
+    }
+
     public static void main(String[] args) {
-        // Write your Java code here
+        Scanner scanner = new Scanner(System.in);
+        int a = 10;
+        int b = 20;
+
+        // Take input arguments if provided via STDIN
+        if (scanner.hasNextInt()) {
+            a = scanner.nextInt();
+            if (scanner.hasNextInt()) {
+                b = scanner.nextInt();
+            }
+        }
+
+        // Call main function with input arguments
+        int result = mainFunction(a, b);
+
+        // Print the returned value from the main function
+        System.out.println("Returned value from main(): " + result);
     }
 }
 `,
@@ -40,8 +84,26 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
     starterCode: `#include <iostream>
 using namespace std;
 
+// Main function taking input arguments and returning a value
+int mainFunction(int a, int b) {
+    return a + b;
+}
+
 int main() {
-    // Write your C++ code here
+    int a = 10;
+    int b = 20;
+
+    // Take input arguments from STDIN if available
+    if (cin >> a >> b) {
+        // Input arguments successfully read
+    }
+
+    // Call main function with input arguments
+    int result = mainFunction(a, b);
+
+    // Print the returned value from the main function
+    cout << "Returned value from main(): " << result << endl;
+
     return 0;
 }
 `,
@@ -53,8 +115,27 @@ int main() {
     extension: '.c',
     starterCode: `#include <stdio.h>
 
+// Main function taking input arguments and returning a value
+int mainFunction(int a, int b) {
+    return a + b;
+}
+
 int main() {
-    // Write your C code here
+    int a = 10;
+    int b = 20;
+
+    // Take input arguments from STDIN if available
+    if (scanf("%d %d", &a, &b) != 2) {
+        a = 10;
+        b = 20;
+    }
+
+    // Call main function with input arguments
+    int result = mainFunction(a, b);
+
+    // Print the returned value from the main function
+    printf("Returned value from main(): %d\\n", result);
+
     return 0;
 }
 `,

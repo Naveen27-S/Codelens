@@ -9,7 +9,7 @@ export type UITransitionSpeed = 'instant' | 'fast' | 'normal' | 'relaxed';
 
 export interface AppSettings {
   // Appearance
-  theme: 'dark' | 'light' | 'system';
+  theme: 'dark' | 'light';
   accentColor: AccentColor;
   editorFontSize: number;
   editorFontFamily: string;
@@ -146,8 +146,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (stored) {
+        const parsed = JSON.parse(stored);
+        // Migrate legacy 'system' theme to 'dark'
+        if (parsed.theme === 'system') parsed.theme = 'dark';
         // Merge stored over defaults so new keys always have a value
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+        return { ...DEFAULT_SETTINGS, ...parsed };
       }
     } catch {
       // corrupted storage — fall back to defaults
@@ -160,24 +163,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
-  // ─── Apply theme to DOM ────────────────────────────────────────────────────
   const resolvedTheme = useMemo(() => {
-    if (settings.theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return settings.theme;
-  }, [settings.theme]);
-
-  // Listen for system theme changes when using 'system'
-  useEffect(() => {
-    if (settings.theme !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => {
-      // Force re-render by "touching" a setting (identity update)
-      setSettings((prev) => ({ ...prev }));
-    };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    return settings.theme === 'light' ? 'light' : 'dark';
   }, [settings.theme]);
 
   // Apply data-theme attribute + accent CSS custom properties

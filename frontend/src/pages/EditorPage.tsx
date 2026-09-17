@@ -173,8 +173,20 @@ export function EditorPage() {
     editorRef.current.revealLineInCenter(lineNum);
   };
 
-  const currentCode = codeByLanguage[language] !== undefined 
-    ? codeByLanguage[language] 
+  const isLegacyPlaceholder = (val?: string) => {
+    if (!val) return true;
+    const trimmed = val.trim();
+    return (
+      trimmed === '# Write your Python code here' ||
+      trimmed === 'public class Main {\n    public static void main(String[] args) {\n        // Write your Java code here\n    }\n}' ||
+      trimmed === '#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your C++ code here\n    return 0;\n}' ||
+      trimmed === '#include <stdio.h>\n\nint main() {\n    // Write your C code here\n    return 0;\n}'
+    );
+  };
+
+  const rawCode = codeByLanguage[language];
+  const currentCode = (rawCode !== undefined && !isLegacyPlaceholder(rawCode))
+    ? rawCode 
     : (activeProblem?.starterCode[language] || getDefaultStarterCode(language));
 
   const handleEditorChange = (value: string | undefined) => {
@@ -191,7 +203,7 @@ export function EditorPage() {
     setLanguage(normalized);
 
     setCodeByLanguage((prev) => {
-      if (prev[normalized] !== undefined) {
+      if (prev[normalized] !== undefined && !isLegacyPlaceholder(prev[normalized])) {
         return prev;
       }
       const starter = activeProblem?.starterCode[normalized] || getDefaultStarterCode(normalized);
@@ -643,7 +655,7 @@ export function EditorPage() {
                     fontWeight: activeTab === 'input' ? 700 : 500,
                   }}
                 >
-                  <Keyboard className="w-3.5 h-3.5" /> STDIN INPUT
+                  <Keyboard className="w-3.5 h-3.5" /> INPUT ARGS / STDIN
                   {stdin.trim().length > 0 && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent-color, #8b5cf6)' }} />}
                 </button>
               </div>
@@ -698,7 +710,7 @@ export function EditorPage() {
               {activeTab === 'input' && (
                 <div className="flex flex-col h-full gap-2">
                   <div className="flex items-center justify-between text-[11px] text-slate-400">
-                    <span>Enter values below to pass to input() / Scanner / cin (space or newline separated):</span>
+                    <span>Enter input arguments below (space or newline separated):</span>
                     <button
                       onClick={() => handleRunCode(undefined, undefined, stdin)}
                       disabled={isRunning}
@@ -713,7 +725,7 @@ export function EditorPage() {
                   <textarea
                     value={stdin}
                     onChange={(e) => setStdin(e.target.value)}
-                    placeholder="Example input values:&#10;Alice&#10;25&#10;100"
+                    placeholder="Example input arguments:&#10;10&#10;20&#10;(or 10 20 on one line)"
                     className="flex-1 w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:border-indigo-500 resize-none"
                     style={{
                       fontFamily: `'${settings.editorFontFamily}', 'Fira Code', monospace`,
@@ -741,7 +753,7 @@ export function EditorPage() {
         {showViz && (
           <div
             style={{ width: vizWidth, minWidth: 280, maxWidth: 'calc(100% - 300px)' }}
-            className="flex-shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col p-2"
+            className="visualizer-panel flex-shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col p-2"
           >
             <VisualizerPanel
               executionResult={clientExecutionResult}
