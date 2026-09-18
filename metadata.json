@@ -1,0 +1,8 @@
+{
+  "name": "CodeLens AI",
+  "description": "Interactive code visualization, step-by-step debugging, and AI tutor for programming in Python, JavaScript, C++, and SQL.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
