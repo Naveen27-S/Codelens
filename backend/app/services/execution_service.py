@@ -5,6 +5,7 @@ from ..database.mongodb import get_mongodb
 from ..schemas.execution import ExecutionRequest
 from .sandbox_service import SandboxFactory
 from .activity_service import create_activity
+from .ai_service import debug_code
 from ..schemas.dashboard import ActivityCreate
 
 logger = logging.getLogger(__name__)
@@ -20,10 +21,10 @@ def execute_code(exec_req: ExecutionRequest, user_id: int):
     # Generate a unique execution ID
     execution_id = f"exec_{uuid.uuid4().hex[:12]}"
 
-    # 5 seconds default timeout as per spec
+    # 5 seconds default timeout
     timeout = 5.0
 
-    # Execute code via sandbox — this must always succeed
+    # Execute code via sandbox — always succeeds (returns ExecutionResult)
     sandbox = SandboxFactory.get_sandbox()
     sandbox_result = sandbox.execute(
         language=language,
@@ -35,7 +36,27 @@ def execute_code(exec_req: ExecutionRequest, user_id: int):
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
 
-    # Build the response payload (always returned, even if DB fails)
+    # ── AI / Rule-based Error Explanation ─────────────────────────────────
+    # Automatically produced for any non-success status.
+    # debug_code() always returns a dict (Gemini or rule-based fallback).
+    # It must never raise — we catch any unexpected exception defensively.
+    error_explanation = None
+    if sandbox_result.status not in ("success", "timeout"):
+        try:
+            error_text = sandbox_result.stderr or sandbox_result.stdout or "Unknown error"
+            error_explanation = debug_code(
+                language=language,
+                code=code,
+                error=error_text,
+            )
+        except Exception as ai_err:
+            logger.warning(
+                "debug_code() raised unexpectedly for execution_id=%s: %s",
+                execution_id, ai_err
+            )
+
+    # ── Build response payload ─────────────────────────────────────────────
+    # Always returned, even if DB fails.
     response_payload = {
         "execution_id": execution_id,
         "status": sandbox_result.status,
@@ -46,11 +67,12 @@ def execute_code(exec_req: ExecutionRequest, user_id: int):
         "exit_code": sandbox_result.exit_code,
         "memory_used": sandbox_result.memory_used,
         "program_name": program_name,
-        "created_at": now_iso
+        "created_at": now_iso,
+        "error_explanation": error_explanation,
     }
 
     # ── MongoDB persistence ────────────────────────────────────────────────
-    # IMPORTANT: MongoDB failure must NEVER prevent the result from being returned.
+    # MongoDB failure must NEVER prevent the result from being returned.
     exec_record = {
         "execution_id": execution_id,
         "user_id": user_id,
@@ -65,7 +87,8 @@ def execute_code(exec_req: ExecutionRequest, user_id: int):
         "execution_time": round(sandbox_result.execution_time, 3),
         "exit_code": sandbox_result.exit_code,
         "memory_used": sandbox_result.memory_used,
-        "created_at": now_iso
+        "error_explanation": error_explanation,
+        "created_at": now_iso,
     }
 
     try:
@@ -73,17 +96,26 @@ def execute_code(exec_req: ExecutionRequest, user_id: int):
         if mongo_db is not None:
             mongo_db.executions.insert_one(exec_record)
         else:
-            logger.warning("MongoDB unavailable — execution record not saved (execution_id=%s)", execution_id)
+            logger.warning(
+                "MongoDB unavailable — execution record not saved (execution_id=%s)", execution_id
+            )
     except Exception as db_err:
-        logger.error("MongoDB insert failed for execution_id=%s: %s", execution_id, db_err)
+        logger.error(
+            "MongoDB insert failed for execution_id=%s: %s", execution_id, db_err
+        )
 
     # ── Activity logging ───────────────────────────────────────────────────
     try:
         activity_status = "completed"
-        if sandbox_result.status in ["compilation_error", "runtime_error", "timeout", "memory_limit", "execution_error"]:
+        if sandbox_result.status in [
+            "compilation_error", "runtime_error", "timeout", "memory_limit", "execution_error"
+        ]:
             activity_status = "error"
 
-        activity_title = f"{program_name} Executed" if program_name else f"{language.capitalize()} Program Executed"
+        activity_title = (
+            f"{program_name} Executed" if program_name
+            else f"{language.capitalize()} Program Executed"
+        )
         activity_desc = f"Executed {language} code snippet ({sandbox_result.status})."
 
         activity_data = ActivityCreate(
@@ -102,11 +134,13 @@ def execute_code(exec_req: ExecutionRequest, user_id: int):
                 "status": sandbox_result.status,
                 "program_id": program_id,
                 "source_code": code,
-                "input": input_data
-            }
+                "input": input_data,
+            },
         )
         create_activity(user_id=user_id, data=activity_data)
     except Exception as act_err:
-        logger.error("Activity logging failed for execution_id=%s: %s", execution_id, act_err)
+        logger.error(
+            "Activity logging failed for execution_id=%s: %s", execution_id, act_err
+        )
 
     return response_payload

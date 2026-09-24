@@ -49,6 +49,8 @@ class ExecutionResponse(BaseModel):
     memory_used: Optional[float] = None
     program_name: Optional[str] = None
     created_at: Optional[str] = None
+    # Structured AI / rule-based error explanation; None when status == "success"
+    error_explanation: Optional[dict] = None
 
     class Config:
         from_attributes = True

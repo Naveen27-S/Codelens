@@ -155,10 +155,45 @@ def _trace_func(frame, event, arg):
 
     return _trace_func
 
+_user_globals = {
+    '__name__': '__main__',
+    '__doc__': None,
+    '__package__': None,
+    '__builtins__': __builtins__,
+}
+
 sys.settrace(_trace_func)
 
 try:
-    exec(${JSON.stringify(code)}, {})
+    exec(${JSON.stringify(code)}, _user_globals)
+
+    # If code defines a main function that was not called during script execution,
+    # pass input arguments and print the returned value
+    if 'main' in _user_globals and callable(_user_globals['main']):
+        _already_called = any(s.get('funcName') == 'main' for s in _steps)
+        if not _already_called:
+            import inspect
+            try:
+                sig = inspect.signature(_user_globals['main'])
+                param_count = len(sig.parameters)
+                _call_args = []
+                for i in range(param_count):
+                    if i < len(_inputs):
+                        raw = _inputs[i]
+                        try:
+                            _call_args.append(int(raw))
+                        except ValueError:
+                            try:
+                                _call_args.append(float(raw))
+                            except ValueError:
+                                _call_args.append(raw)
+                    else:
+                        _call_args.append(0)
+                _ret = _user_globals['main'](*_call_args)
+                if _ret is not None:
+                    print(f"Returned value from main(): {_ret}")
+            except Exception as _call_err:
+                pass
 except Exception as _e:
     import traceback
     _stderr_buffer.write(traceback.format_exc())

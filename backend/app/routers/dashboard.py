@@ -25,7 +25,10 @@ from ..schemas.dashboard import (
     DashboardHistoryStatsResponse,
     SessionTimeRequest,
 )
+from ..schemas.program import ProgramCreate, ProgramUpdate, ProgramResponse
 from ..services import activity_service
+from ..services import dashboard_history_service
+
 
 router = APIRouter()
 
@@ -79,6 +82,24 @@ def list_user_activities(
         search=search,
         page=page,
         limit=limit,
+    )
+
+@router.get("/practice-time/history", response_model=ActivityListResponse)
+def list_practice_time_history(
+    date_range: Optional[str] = Query(None, description="Filter by date range (today, this_week, this_month)"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Retrieve paginated practice activities for the authenticated user."""
+    return activity_service.get_user_activities(
+        user_id=current_user.id,
+        activity_type="practice",
+        date_range=date_range,
+        page=page,
+        limit=limit,
+        db=db,
     )
 
 
@@ -160,6 +181,91 @@ def get_recent_programs(
         )
         for p in programs
     ]
+
+
+@router.get("/saved-programs")
+def get_saved_programs_history(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    language: Optional[str] = Query(None, description="Filter by language"),
+    search: Optional[str] = Query(None, description="Search by program name"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return the complete saved programs history for the authenticated user.
+    Each record includes: program_id, name, language, code, line_count,
+    created_at, updated_at.
+    """
+    from ..database.mongodb import get_mongodb
+    mongo_db = get_mongodb()
+    if mongo_db is None:
+        return {"items": [], "total": 0, "page": page, "limit": limit, "pages": 1}
+
+    query: dict = {"$or": [{"user_id": current_user.id}, {"user_id": str(current_user.id)}]}
+    if language and language.lower() not in ("all", ""):
+        lang_clean = language.strip().lower()
+        if lang_clean == "c":
+            query["language"] = {"$in": ["c", "C"]}
+        elif lang_clean in ("cpp", "c++"):
+            query["language"] = {"$in": ["cpp", "c++", "CPP", "C++"]}
+        elif lang_clean in ("python", "py"):
+            query["language"] = {"$in": ["python", "py", "Python", "PYTHON"]}
+        elif lang_clean == "java":
+            query["language"] = {"$in": ["java", "Java", "JAVA"]}
+        else:
+            query["language"] = {"$regex": f"^{lang_clean}$", "$options": "i"}
+
+    if search and search.strip():
+        query["name"] = {"$regex": search.strip(), "$options": "i"}
+
+    total = mongo_db.programs.count_documents(query)
+    pages = max(1, (total + limit - 1) // limit)
+    skip = max(0, (page - 1) * limit)
+
+    docs = list(
+        mongo_db.programs.find(query)
+        .sort([("updated_at", -1), ("_id", -1)])
+        .skip(skip)
+        .limit(limit)
+    )
+
+    items = []
+    for p in docs:
+        code = p.get("code", "")
+        line_count = len(code.splitlines()) if code else 0
+        items.append({
+            "program_id": p.get("program_id", ""),
+            "name": p.get("name", "Untitled Program"),
+            "language": p.get("language", "python"),
+            "code": code,
+            "description": p.get("description", ""),
+            "output": p.get("output", ""),
+            "status": p.get("status", "completed"),
+            "line_count": line_count,
+            "created_at": p.get("created_at", ""),
+            "updated_at": p.get("updated_at", ""),
+        })
+
+    return {"items": items, "total": total, "page": page, "limit": limit, "pages": pages}
+
+
+@router.post("/saved-programs", response_model=ProgramResponse, status_code=status.HTTP_201_CREATED)
+def save_program_via_dashboard(
+    req: ProgramCreate,
+    current_user: User = Depends(get_current_user),
+):
+    from .programs import create_program
+    return create_program(req=req, current_user=current_user)
+
+
+@router.put("/saved-programs/{program_id}", response_model=ProgramResponse)
+def update_program_via_dashboard(
+    program_id: str,
+    req: ProgramUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    from .programs import update_program
+    return update_program(program_id=program_id, req=req, current_user=current_user)
 
 
 @router.get("/visualizations", response_model=List[RecentVisualizationResponse])
@@ -268,3 +374,129 @@ def get_practice_recommendations():
         RecommendationResponse(id="sorting", topic="Sorting", difficulty="Intermediate", problems=7, icon="🔢"),
         RecommendationResponse(id="recursion", topic="Recursion", difficulty="Intermediate", problems=8, icon="🔄"),
     ]
+
+
+# ── Dashboard History Endpoints ────────────────────────────────────────────────
+
+@router.post("/history", response_model=DashboardHistoryEventResponse, status_code=201)
+def record_dashboard_history_event(
+    req: DashboardHistoryEventCreate,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Record a dashboard history event (dashboard open, program open, etc.)
+    into the MongoDB dashboard_history collection.
+    """
+    result = dashboard_history_service.record_dashboard_event(
+        user_id=current_user.id,
+        event_type=req.event_type,
+        title=req.title,
+        description=req.description,
+        metadata=req.metadata,
+    )
+    return DashboardHistoryEventResponse(
+        id=result["id"],
+        user_id=current_user.id,
+        event_type=result["event_type"],
+        title=result["title"],
+        description=result.get("description"),
+        metadata=result.get("metadata"),
+        created_at=result.get("created_at"),
+    )
+
+
+@router.get("/history", response_model=DashboardHistoryListResponse)
+def list_dashboard_history(
+    event_type: Optional[str] = Query(None, description="Filter by event type (dashboard_open, program_open, ...)"),
+    date_range: Optional[str] = Query(None, description="today | this_week | this_month"),
+    search: Optional[str] = Query(None, description="Keyword search in title/description"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return paginated, filtered dashboard history events for the authenticated user
+    from MongoDB dashboard_history collection.
+    """
+    data = dashboard_history_service.get_dashboard_history(
+        user_id=current_user.id,
+        event_type=event_type,
+        date_range=date_range,
+        search=search,
+        page=page,
+        limit=limit,
+    )
+    items = [
+        DashboardHistoryEventResponse(
+            id=item["id"],
+            user_id=current_user.id,
+            event_type=item["event_type"],
+            title=item["title"],
+            description=item.get("description"),
+            metadata=item.get("metadata"),
+            created_at=item.get("created_at"),
+        )
+        for item in data["items"]
+    ]
+    return DashboardHistoryListResponse(
+        items=items,
+        total=data["total"],
+        page=data["page"],
+        limit=data["limit"],
+        pages=data["pages"],
+    )
+
+
+@router.get("/history/recent", response_model=List[DashboardHistoryEventResponse])
+def get_recent_dashboard_history(
+    limit: int = Query(10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+):
+    """Return the most recent N dashboard history events for the authenticated user."""
+    docs = dashboard_history_service.get_recent_dashboard_history(
+        user_id=current_user.id, limit=limit
+    )
+    return [
+        DashboardHistoryEventResponse(
+            id=d["id"],
+            user_id=current_user.id,
+            event_type=d["event_type"],
+            title=d["title"],
+            description=d.get("description"),
+            metadata=d.get("metadata"),
+            created_at=d.get("created_at"),
+        )
+        for d in docs
+    ]
+
+
+@router.get("/history/stats", response_model=DashboardHistoryStatsResponse)
+def get_dashboard_history_stats(
+    current_user: User = Depends(get_current_user),
+):
+    """Return aggregate statistics for the user's dashboard history (total, today, week, month, breakdown)."""
+    stats = dashboard_history_service.get_dashboard_history_stats(user_id=current_user.id)
+    return DashboardHistoryStatsResponse(**stats)
+
+
+@router.delete("/history/{item_id}")
+def delete_dashboard_history_item(
+    item_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a single dashboard history record by its MongoDB ObjectId."""
+    deleted = dashboard_history_service.delete_dashboard_history_item(
+        user_id=current_user.id, item_id=item_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Dashboard history record not found or access denied.")
+    return {"message": "Dashboard history record deleted.", "id": item_id}
+
+
+@router.delete("/history")
+def clear_all_dashboard_history(
+    current_user: User = Depends(get_current_user),
+):
+    """Delete ALL dashboard history events for the authenticated user."""
+    count = dashboard_history_service.clear_dashboard_history(user_id=current_user.id)
+    return {"message": f"Cleared {count} dashboard history record(s).", "deleted_count": count}

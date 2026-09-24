@@ -1,12 +1,18 @@
+import json
+import re
+import logging
 import google.generativeai as genai
 from ..core.config import settings
+
+logger = logging.getLogger(__name__)
+
 
 def get_gemini_model():
     if not settings.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is not set")
     genai.configure(api_key=settings.GEMINI_API_KEY)
-    # Use gemini-2.5-flash as default, or whatever is preferred
     return genai.GenerativeModel('gemini-2.5-flash')
+
 
 # ---------------------------------------------------------------------------
 # Rule-based fallback error explainer
@@ -166,7 +172,21 @@ def explain_code(language: str, code: str, explanation_level: str = "intermediat
     except Exception as e:
         return f"AI Service Error: {str(e)}"
 
+
 def debug_code(language: str, code: str, error: str) -> dict:
+    """
+    Return a structured error explanation dict with keys:
+        problem, explanation, solution, corrected_code
+
+    Tries Gemini first; falls back to rule-based explainer if:
+    - GEMINI_API_KEY is not set
+    - The API call fails for any reason
+    """
+    # Fast path: no API key configured
+    if not settings.GEMINI_API_KEY:
+        logger.info("GEMINI_API_KEY not set — using rule-based error explanation")
+        return get_rule_based_explanation(language, code, error)
+
     try:
         model = get_gemini_model()
         prompt = f"""
@@ -193,59 +213,287 @@ def debug_code(language: str, code: str, error: str) -> dict:
         }}
         """
         response = model.generate_content(prompt)
-        # Parse JSON carefully, assuming the model might still return markdown
-        import json
         text = response.text
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.endswith("```"):
-            text = text[:-3]
-        
+        # Strip markdown code fences if the model wrapped the JSON anyway
+        text = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text.strip())
+
         try:
             return json.loads(text.strip())
         except json.JSONDecodeError:
-            return {
-                "problem": "Could not parse AI response",
-                "explanation": response.text,
-                "solution": "",
-                "corrected_code": code
-            }
+            logger.warning("Gemini returned non-JSON; falling back to rule-based explainer")
+            return get_rule_based_explanation(language, code, error)
+
     except Exception as e:
-        return {
-            "problem": "AI Service Error",
-            "explanation": str(e),
-            "solution": "",
-            "corrected_code": ""
-        }
+        logger.warning("Gemini debug_code failed (%s); falling back to rule-based explainer", e)
+        return get_rule_based_explanation(language, code, error)
+
+
+
+# ---------------------------------------------------------------------------
+# Mermaid extraction and sanitization helpers
+# ---------------------------------------------------------------------------
+
+# Diagram type keywords that are valid starts for a Mermaid diagram
+_MERMAID_STARTS = (
+    "flowchart", "graph", "sequencediagram", "classDiagram",
+    "stateDiagram", "erDiagram", "gantt", "pie", "gitGraph", "mindmap",
+)
+
+def _extract_mermaid(text: str) -> str:
+    """
+    Extract ONLY the Mermaid diagram source from an AI response.
+
+    Strategy (multi-pass):
+    1. If the text contains ```mermaid ... ``` fences, take the content inside.
+    2. Else if the text contains ``` ... ``` fences (any language), take the content.
+    3. Else search for the first line that starts a known diagram type
+       (flowchart, graph, sequenceDiagram, …) and return from there to end,
+       discarding any trailing prose lines that don't look like Mermaid.
+    4. If none of the above work, return the text as-is (sanitizer will catch it).
+    """
+    if not text:
+        return ""
+    # Pass 1: explicit ```mermaid fence
+    m = re.search(r"```mermaid\s*\n([\s\S]*?)```", text, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+
+    # Pass 2: any ``` fence
+    m = re.search(r"```[^\n]*\n([\s\S]*?)```", text)
+    if m:
+        candidate = m.group(1).strip()
+        if any(candidate.lower().startswith(kw.lower()) for kw in _MERMAID_STARTS):
+            return candidate
+
+    # Pass 3: find first Mermaid-like line and take from there
+    lines = text.splitlines()
+    start_idx = None
+    for i, line in enumerate(lines):
+        stripped = line.strip().lower()
+        if any(stripped.startswith(kw.lower()) for kw in _MERMAID_STARTS):
+            start_idx = i
+            break
+
+    if start_idx is not None:
+        diagram_lines = lines[start_idx:]
+        while diagram_lines and not re.search(r"--?>|==?>|-\.->|[\[\(\{\}>]", diagram_lines[-1]):
+            if not diagram_lines[-1].strip():
+                diagram_lines.pop()
+            else:
+                break
+        return "\n".join(diagram_lines).strip()
+
+    return text.strip()
+
+
+def _sanitize_label_content(label: str) -> str:
+    """Sanitize and double-quote the inner content of a node or edge label."""
+    if not label:
+        return '""'
+    
+    label = label.strip()
+
+    # If already enclosed in double quotes, strip outer pair
+    if label.startswith('"') and label.endswith('"') and len(label) >= 2:
+        label = label[1:-1]
+
+    # Convert inner double quotes to single quotes to prevent breaking Mermaid string boundaries
+    label = label.replace('"', "'")
+
+    # Escape HTML special characters for htmlLabels compatibility
+    label = label.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    # Replace newlines with <br/>
+    label = label.replace('\r\n', '<br/>').replace('\n', '<br/>')
+
+    return f'"{label}"'
+
+
+def _sanitize_mermaid_line(line: str) -> str:
+    """
+    Sanitize a single line of Mermaid diagram code.
+    Handles node definitions (with shape brackets) and edge labels.
+    """
+    line_str = line.strip()
+    if not line_str or line_str.startswith("%%"):
+        return line
+
+    lower_line = line_str.lower()
+    if any(lower_line.startswith(kw) for kw in _MERMAID_STARTS):
+        return line_str
+
+    SHAPES = [
+        (r'\(\(', r'\)\)', '((', '))'),   # Circle: ((label))
+        (r'\[\[', r'\]\]', '[[', ']]'),   # Subroutine: [[label]]
+        (r'\[\(', r'\)\]', '[(', ')]'),   # Database: [(label)]
+        (r'\(\[', r'\]\)', '([', '])'),   # Stadium: ([label])
+        (r'\{\{', r'\}\}', '{{', '}}'),   # Hexagon: {{label}}
+        (r'\[/',  r'/\]',  '[/', '/]'),   # Parallelogram: [/label/]
+        (r'\[\\', r'\\\]', '[\\', '\\]'), # Parallelogram: [\label\]
+        (r'\[/',  r'\\\]', '[/', '\\]'),  # Trapezoid: [/label\]
+        (r'\[\\', r'/\]',  '[\\', '/]'),  # Trapezoid: [\label/]
+        (r'>',    r'\]',   '>',  ']'),    # Asymmetric: >label]
+        (r'\[',   r'\]',   '[',  ']'),    # Rectangle: [label]
+        (r'\{',   r'\}',   '{',  '}'),    # Rhombus: {label}
+        (r'\(',   r'\)',   '(',  ')'),    # Round: (label)
+    ]
+
+    # Sanitize edge labels
+    def fix_edge1(m):
+        lbl = m.group(1).strip()
+        clean = _sanitize_label_content(lbl)
+        return f"-- {clean} -->"
+    line_str = re.sub(r'--\s*([^-\n>]+?)\s*-->', fix_edge1, line_str)
+
+    def fix_edge2(m):
+        lbl = m.group(1).strip()
+        clean = _sanitize_label_content(lbl)
+        return f"-->|{clean}|"
+    line_str = re.sub(r'-->\|([^|\n]+?)\|', fix_edge2, line_str)
+
+    # Sanitize node declarations iteratively across the line
+    node_regex = re.compile(
+        r'(?P<id>[A-Za-z0-9_]+)\s*(?P<open>\(\(|\[\[|\[\(|\(\[\|\{\{|\[/|\[\\|>|\[|\{|\()(?P<rest>.*)'
+    )
+
+    result_parts = []
+    curr = line_str
+
+    while True:
+        m = node_regex.search(curr)
+        if not m:
+            result_parts.append(curr)
+            break
+
+        prefix = curr[:m.start()]
+        node_id = m.group('id')
+        open_delim = m.group('open')
+        rest = m.group('rest')
+
+        matched_shape = None
+        for shape in SHAPES:
+            if open_delim == shape[2]:
+                matched_shape = shape
+                break
+
+        if not matched_shape:
+            result_parts.append(curr[:m.end()])
+            curr = curr[m.end():]
+            continue
+
+        _, _, op_str, cl_str = matched_shape
+
+        edge_match = re.search(r'--?>|==?>|-\.->', rest)
+        search_end = edge_match.start() if edge_match else len(rest)
+
+        cl_idx = rest[:search_end].rfind(cl_str)
+        if cl_idx == -1:
+            cl_idx = rest.rfind(cl_str)
+
+        if cl_idx == -1:
+            result_parts.append(curr[:m.end()])
+            curr = curr[m.end():]
+            continue
+
+        label_raw = rest[:cl_idx]
+        remainder = rest[cl_idx + len(cl_str):]
+
+        clean_label = _sanitize_label_content(label_raw)
+        result_parts.append(f"{prefix}{node_id}{op_str}{clean_label}{cl_str}")
+        curr = remainder
+
+    return "".join(result_parts)
+
+
+def _sanitize_mermaid(source: str) -> str:
+    """
+    Post-process AI-generated Mermaid source to fix common parsing issues:
+    - Normalise line endings & remove stray backtick fences
+    - Remove explanatory prose before/after diagram declaration
+    - Wrap node and edge labels in double quotes `"..."` and escape inner quotes/brackets
+    - Ensure first line is a valid diagram declaration
+    """
+    source = source.replace("\r\n", "\n").replace("\r", "\n")
+    source = re.sub(r"^```[^\n]*\n?", "", source.strip(), flags=re.MULTILINE)
+    source = re.sub(r"```\s*$", "", source.strip(), flags=re.MULTILINE)
+    source = source.strip()
+
+    lines = source.splitlines()
+    start_idx = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip().lower()
+        if any(stripped.startswith(kw.lower()) for kw in _MERMAID_STARTS):
+            start_idx = i
+            break
+    lines = lines[start_idx:]
+
+    fixed_lines = [_sanitize_mermaid_line(line) for line in lines]
+    result = "\n".join(fixed_lines).strip()
+
+    if not any(result.lower().startswith(kw.lower()) for kw in _MERMAID_STARTS):
+        return 'flowchart TD\n    E["Diagram generation failed — please try again"]'
+
+    return result
+
 
 def visualize_code(language: str, code: str) -> str:
+    """
+    Generate a Mermaid.js flowchart for the given source code.
+
+    Returns a clean, sanitized Mermaid diagram string ready for direct
+    use in mermaid.render(). Never returns raw AI prose.
+    """
     try:
         model = get_gemini_model()
-        prompt = f"""
-        Analyze the following {language} code and generate a valid Mermaid.js flowchart diagram representing its control flow, logic, or architecture.
-        
-        Strict Rules for the Mermaid syntax:
-        1. Start with `flowchart TD`.
-        2. Use only simple node shapes: `A[Text]`, `B{{Condition}}`, `C((Start/End))`.
-        3. ALWAYS wrap node labels in quotes if they contain special characters (e.g. `<`, `>`, `=`, `?`, `:`), like this: `B{{"n <= 1?"}}` or `A["Start: func()"]`.
-        4. ALWAYS explicitly define connections between nodes using `-->`. Do not place nodes on the same line without a connector.
-        5. ONLY return the raw Mermaid syntax. Do not wrap it in markdown code blocks.
-        
-        Code:
-        ```{language}
-        {code}
-        ```
-        """
+
+        prompt = f"""\
+You are a Mermaid.js diagram generator. Output ONLY raw Mermaid diagram syntax — no explanations, no markdown fences, no prose.
+
+Generate a `flowchart TD` diagram for the following {language} code.
+
+MANDATORY SYNTAX RULES (Mermaid v11):
+1. First line MUST be exactly: flowchart TD
+2. EVERY node label MUST be wrapped in double quotes:
+   Example:   A["Start"]   B["Initialize arr, n"]   C{{"i < n?"}}   D["arr[i] > largest?"]
+3. If code inside a label uses double quotes, convert them to single quotes (e.g. A["Print: 'Hello'"]).
+4. Use only alphanumeric node IDs (A, B, C, N1, N2). Do NOT use special characters in node IDs.
+5. Use standard node shapes:
+   - Rectangle:     A["Label"]
+   - Diamond:       B{{"Label"}}
+   - Round:         C("Label")
+   - Circle:        D(("Label"))
+6. Edge text MUST also be wrapped in double quotes:
+   Example:   A -- "Yes" --> B    or    A -->|"No"| C
+7. Keep labels concise and clean (max 50 characters).
+8. Do NOT output any text before or after the diagram.
+
+{language.upper()} code:
+```
+{code}
+```
+
+Mermaid diagram:"""
+
         response = model.generate_content(prompt)
-        text = response.text.strip()
-        
-        # Use regex to extract mermaid code if Gemini wrapped it despite instructions
-        import re
-        match = re.search(r"```(?:mermaid)?(.*?)```", text, re.DOTALL)
-        if match:
-            text = match.group(1).strip()
-            
-        return text.strip()
+        raw = response.text or ""
+
+        # Step 1: extract the diagram from whatever the model returned
+        extracted = _extract_mermaid(raw)
+
+        # Step 2: sanitize common AI mistakes
+        sanitized = _sanitize_mermaid(extracted)
+
+        logger.info(
+            "visualize_code: extracted=%d chars, sanitized=%d chars, first_line=%r",
+            len(extracted), len(sanitized),
+            sanitized.splitlines()[0] if sanitized else "(empty)"
+        )
+
+        return sanitized
+
     except Exception as e:
-        # Return a simple error graph if it fails
-        return f"graph TD\nError[\"AI Service Error: {str(e)}\"]"
+        logger.error("visualize_code error: %s", e)
+        return f'flowchart TD\n    E["AI Service Error: {str(e)[:80]}"]'
+
+

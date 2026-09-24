@@ -7,11 +7,15 @@
  */
 
 import axios from 'axios';
+import { executeCodeClient } from './runners/clientExecutionService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('codelens_jwt');
+const TOKEN_KEY = 'codelens_jwt';
+
+/** Returns Bearer auth header from JWT stored in localStorage. */
+function authHeaders() {
+  const token = localStorage.getItem(TOKEN_KEY);
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -21,10 +25,13 @@ export interface DashboardStats {
   totalPrograms: number;
   totalExecutions: number;
   totalVisualizations: number;
+  totalPracticed: number;      // Programs Practiced count
   learningHours: number;
-  programsTrend: number;   // % change this week
+  longestStreak: number;       // Coding Streak (longest)
+  programsTrend: number;
   executionsTrend: number;
   visualizationsTrend: number;
+  practiceTrend: number;
   learningTrend: number;
 }
 
@@ -133,14 +140,17 @@ export interface DashboardData {
 // ─── Default/mock fallback data ───────────────────────────────────────────────
 
 const DEFAULT_STATS: DashboardStats = {
-  totalPrograms: 42,
-  totalExecutions: 128,
-  totalVisualizations: 86,
-  learningHours: 12.5,
-  programsTrend: 12,
-  executionsTrend: 18,
-  visualizationsTrend: 24,
-  learningTrend: 8,
+  totalPrograms: 0,
+  totalExecutions: 0,
+  totalVisualizations: 0,
+  totalPracticed: 0,
+  learningHours: 0,
+  longestStreak: 0,
+  programsTrend: 0,
+  executionsTrend: 0,
+  visualizationsTrend: 0,
+  practiceTrend: 0,
+  learningTrend: 0,
 };
 
 const DEFAULT_STREAK: StreakData = {
@@ -246,13 +256,13 @@ const DEFAULT_VISUALIZATIONS: RecentVisualization[] = [
     return fibonacci(n-1) + fibonacci(n-2)
 
 print(fibonacci(10))`,
-    mermaidExplanation: `graph TD
-    A[fibonacci 5] --> B[fibonacci 4]
-    A --> C[fibonacci 3]
-    B --> D[fibonacci 3]
-    B --> E[fibonacci 2]
-    C --> F[fibonacci 2]
-    C --> G[fibonacci 1]
+    mermaidExplanation: `flowchart TD
+    A["fibonacci(5)"] --> B["fibonacci(4)"]
+    A --> C["fibonacci(3)"]
+    B --> D["fibonacci(3)"]
+    B --> E["fibonacci(2)"]
+    C --> F["fibonacci(2)"]
+    C --> G["fibonacci(1)"]
 `
   },
   {
@@ -279,14 +289,16 @@ print(fibonacci(10))`,
         System.out.println(search(arr, 10));
     }
 }`,
-    mermaidExplanation: `graph TD
-    Start --> Check{low <= high}
-    Check -- Yes --> Mid[mid = low + high-low / 2]
-    Mid --> Equal{arr mid == target}
-    Equal -- Yes --> Return[return mid]
-    Equal -- No --> Less{arr mid < target}
-    Less -- Yes --> Right[low = mid + 1]
-    Less -- No --> Left[high = mid - 1]
+    mermaidExplanation: `flowchart TD
+    Start(["Start"]) --> Check{"low <= high?"}
+    Check -- Yes --> Mid["mid = low + (high-low)/2"]
+    Mid --> Equal{"arr[mid] == target?"}
+    Equal -- Yes --> Return(["return mid"])
+    Equal -- No --> Less{"arr[mid] < target?"}
+    Less -- Yes --> Right["low = mid + 1"]
+    Less -- No --> Left["high = mid - 1"]
+    Right --> Check
+    Left --> Check
 `
   },
   {
@@ -305,12 +317,14 @@ print(fibonacci(10))`,
     return arr
 
 print(bubble_sort([64, 34, 25, 12, 22, 11, 90]))`,
-    mermaidExplanation: `graph TD
-    Start --> LoopI[i = 0 to n]
-    LoopI --> LoopJ[j = 0 to n-i-1]
-    LoopJ --> Compare{arr j > arr j+1}
-    Compare -- Yes --> Swap[Swap arr j and arr j+1]
-    Compare -- No --> Next
+    mermaidExplanation: `flowchart TD
+    Start(["Start"]) --> LoopI["for i = 0 to n"]
+    LoopI --> LoopJ["for j = 0 to n-i-1"]
+    LoopJ --> Compare{"arr[j] > arr[j+1]?"}
+    Compare -- Yes --> Swap["Swap arr[j] and arr[j+1]"]
+    Compare -- No --> Next["Next j"]
+    Swap --> Next
+    Next --> LoopJ
 `
   }
 ];
@@ -422,7 +436,7 @@ export async function recordUserActivity(activity: {
   description?: string;
   program_name?: string;
   language?: string;
-  topic?: string;
+  topic?: string | null;
   status?: string;
   started_at?: string;
   completed_at?: string;
@@ -430,7 +444,11 @@ export async function recordUserActivity(activity: {
   metadata_json?: Record<string, any>;
 }): Promise<UserActivityItem | null> {
   try {
-    const res = await axios.post<UserActivityItem>(`${API_URL}/dashboard/activity`, activity);
+    const res = await axios.post<UserActivityItem>(
+      `${API_URL}/dashboard/activity`,
+      activity,
+      { headers: authHeaders() }
+    );
     return res.data;
   } catch (err) {
     console.warn('Could not persist activity to backend:', err);
@@ -488,7 +506,10 @@ export async function fetchPracticeTimeHistory(options: ActivityFilterOptions = 
  */
 export async function fetchRecentActivities(limit: number = 10): Promise<UserActivityItem[]> {
   try {
-    const res = await axios.get<UserActivityItem[]>(`${API_URL}/dashboard/activity/recent?limit=${limit}`);
+    const res = await axios.get<UserActivityItem[]>(
+      `${API_URL}/dashboard/activity/recent?limit=${limit}`,
+      { headers: authHeaders() }
+    );
     if (res.data && res.data.length > 0) return res.data;
     return DEFAULT_RECENT_ACTIVITIES;
   } catch {
@@ -509,7 +530,10 @@ export async function fetchFullActivities(options: ActivityFilterOptions = {}): 
   params.append('limit', String(limit));
 
   try {
-    const res = await axios.get<ActivityListResult>(`${API_URL}/dashboard/activity?${params.toString()}`);
+    const res = await axios.get<ActivityListResult>(
+      `${API_URL}/dashboard/activity?${params.toString()}`,
+      { headers: authHeaders() }
+    );
     return res.data;
   } catch {
     // Return mock paginated list
@@ -541,7 +565,10 @@ export async function fetchFullActivities(options: ActivityFilterOptions = {}): 
  */
 export async function fetchUserStreak(): Promise<StreakData> {
   try {
-    const res = await axios.get<StreakData>(`${API_URL}/dashboard/streak`);
+    const res = await axios.get<StreakData>(
+      `${API_URL}/dashboard/streak`,
+      { headers: authHeaders() }
+    );
     return res.data;
   } catch {
     return DEFAULT_STREAK;
@@ -553,7 +580,10 @@ export async function fetchUserStreak(): Promise<StreakData> {
  */
 export async function fetchLearningTime(): Promise<LearningTimeData> {
   try {
-    const res = await axios.get<LearningTimeData>(`${API_URL}/dashboard/learning-time`);
+    const res = await axios.get<LearningTimeData>(
+      `${API_URL}/dashboard/learning-time`,
+      { headers: authHeaders() }
+    );
     return res.data;
   } catch {
     return DEFAULT_LEARNING_TIME;
@@ -565,7 +595,10 @@ export async function fetchLearningTime(): Promise<LearningTimeData> {
  */
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   try {
-    const res = await axios.get<DashboardStats>(`${API_URL}/dashboard/stats`);
+    const res = await axios.get<DashboardStats>(
+      `${API_URL}/dashboard/stats`,
+      { headers: authHeaders() }
+    );
     return res.data;
   } catch {
     return DEFAULT_STATS;
@@ -577,7 +610,10 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
  */
 export async function fetchRecentPrograms(): Promise<RecentProgram[]> {
   try {
-    const res = await axios.get<RecentProgram[]>(`${API_URL}/dashboard/recent-programs`);
+    const res = await axios.get<RecentProgram[]>(
+      `${API_URL}/dashboard/recent-programs`,
+      { headers: authHeaders() }
+    );
     if (res.data && res.data.length > 0) return res.data;
     return DEFAULT_PROGRAMS;
   } catch {
@@ -590,7 +626,10 @@ export async function fetchRecentPrograms(): Promise<RecentProgram[]> {
  */
 export async function fetchRecentVisualizations(): Promise<RecentVisualization[]> {
   try {
-    const res = await axios.get<RecentVisualization[]>(`${API_URL}/dashboard/visualizations`);
+    const res = await axios.get<RecentVisualization[]>(
+      `${API_URL}/dashboard/visualizations`,
+      { headers: authHeaders() }
+    );
     if (res.data && res.data.length > 0) return res.data;
     return DEFAULT_VISUALIZATIONS;
   } catch {
@@ -603,7 +642,10 @@ export async function fetchRecentVisualizations(): Promise<RecentVisualization[]
  */
 export async function fetchCodingActivity(): Promise<DayActivity[]> {
   try {
-    const res = await axios.get<{ days: DayActivity[] }>(`${API_URL}/dashboard/activity/daily`);
+    const res = await axios.get<{ days: DayActivity[] }>(
+      `${API_URL}/dashboard/activity/daily`,
+      { headers: authHeaders() }
+    );
     if (res.data && res.data.days && res.data.days.length > 0) return res.data.days;
     return DEFAULT_ACTIVITY;
   } catch {
@@ -616,7 +658,10 @@ export async function fetchCodingActivity(): Promise<DayActivity[]> {
  */
 export async function fetchLearningProgress(): Promise<LanguageProgress[]> {
   try {
-    const res = await axios.get<LanguageProgress[]>(`${API_URL}/dashboard/progress`);
+    const res = await axios.get<LanguageProgress[]>(
+      `${API_URL}/dashboard/progress`,
+      { headers: authHeaders() }
+    );
     if (res.data && res.data.length > 0) return res.data;
     return DEFAULT_PROGRESS;
   } catch {
@@ -643,6 +688,139 @@ export async function fetchRecommendations(): Promise<Recommendation[]> {
 export async function fetchAIInsight(): Promise<string> {
   return DEFAULT_AI_INSIGHT;
 }
+
+// ── Saved Programs History ────────────────────────────────────────────────────
+
+export interface SavedProgram {
+  program_id: string;
+  name: string;
+  language: string;
+  code: string;
+  description?: string;
+  output?: string;
+  status?: string;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedProgramsResult {
+  items: SavedProgram[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+/**
+ * Fetch the full saved programs history from MongoDB.
+ * Supports pagination, language filter, and name search.
+ */
+export async function fetchSavedPrograms(options: {
+  page?: number;
+  limit?: number;
+  language?: string;
+  search?: string;
+} = {}): Promise<SavedProgramsResult> {
+  const { page = 1, limit = 20, language, search } = options;
+  const params = new URLSearchParams();
+  params.append('page', String(page));
+  params.append('limit', String(limit));
+  if (language && language !== 'all') params.append('language', language);
+  if (search) params.append('search', search);
+
+  try {
+    const res = await axios.get<SavedProgramsResult>(
+      `${API_URL}/dashboard/saved-programs?${params.toString()}`,
+      { headers: authHeaders() }
+    );
+    return res.data;
+  } catch {
+    return { items: [], total: 0, page, limit, pages: 1 };
+  }
+}
+
+/**
+ * Save a program directly to MongoDB (from Editor or Dashboard).
+ */
+export async function saveProgramDirectly(data: {
+  name: string;
+  language: string;
+  code: string;
+  description?: string;
+  output?: string;
+  status?: string;
+}): Promise<SavedProgram> {
+  const res = await axios.post<SavedProgram>(
+    `${API_URL}/programs`,
+    data,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+/**
+ * Delete a saved program by ID.
+ */
+export async function deleteSavedProgram(programId: string): Promise<boolean> {
+  try {
+    await axios.delete(`${API_URL}/programs/${programId}`, { headers: authHeaders() });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Update an existing saved program (e.g. name, code, description, output, status).
+ */
+export async function updateSavedProgram(
+  programId: string,
+  data: Partial<{
+    name: string;
+    language: string;
+    code: string;
+    description: string;
+    output: string;
+    status: string;
+  }>
+): Promise<SavedProgram> {
+  const res = await axios.put<SavedProgram>(
+    `${API_URL}/programs/${programId}`,
+    data,
+    { headers: authHeaders() }
+  );
+  return res.data;
+}
+
+/**
+ * Execute a program directly from the dashboard (supports C, C++, Java, Python, JS).
+ * Returns captured stdout/stderr, success flag, and runtime in milliseconds.
+ */
+export async function runDashboardProgram(
+  language: string,
+  code: string,
+  inputData: string = ''
+): Promise<{ stdout: string; stderr: string; success: boolean; timeMs: number }> {
+  try {
+    const result = await executeCodeClient(language, code, inputData);
+    const success = result.status === 'success';
+    return {
+      stdout: result.stdout || '',
+      stderr: result.stderr || '',
+      success,
+      timeMs: result.executionTimeMs || 0,
+    };
+  } catch (err: any) {
+    return {
+      stdout: '',
+      stderr: err.message || 'Execution error',
+      success: false,
+      timeMs: 0,
+    };
+  }
+}
+
 
 /**
  * Load all dashboard data in parallel.

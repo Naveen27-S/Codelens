@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Terminal, Code2, Zap, BrainCircuit, PlayCircle, LogIn, LogOut, User } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { EditorPage } from './pages/EditorPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -102,7 +102,7 @@ function LandingPage() {
   const [showDemo, setShowDemo] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white selection:bg-indigo-500/30 overflow-hidden relative">
+    <div className="landing-page min-h-screen bg-slate-950 text-white selection:bg-indigo-500/30 overflow-hidden relative">
       {/* Background Gradients */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-600/20 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-violet-600/20 blur-[120px] pointer-events-none" />
@@ -151,7 +151,7 @@ function LandingPage() {
           </AuthCTA>
           <button
             onClick={() => setShowDemo(true)}
-            className="flex items-center gap-2 px-8 py-4 bg-slate-800/50 hover:bg-slate-800 text-white rounded-full font-semibold border border-slate-700/50 backdrop-blur-md transition-all active:scale-95 hover:shadow-[0_0_30px_rgba(139,92,246,0.3)] hover:border-violet-500/40"
+            className="flex items-center gap-2 px-8 py-4 bg-slate-800/50 hover:bg-slate-800 text-white rounded-full font-semibold border border-slate-700/50 backdrop-blur-md transition-all active:scale-95 hover:shadow-[0_0_30px_rgba(139,92,246,0.3)] hover:border-violet-500/40 cursor-pointer"
           >
             <PlayCircle className="w-5 h-5 text-violet-400" />
             Watch Demo
@@ -182,7 +182,7 @@ function LandingPage() {
           <motion.div
             animate={{ y: [0, -10, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -right-8 top-1/2 p-4 bg-slate-800/90 backdrop-blur-xl border border-indigo-500/30 rounded-2xl shadow-xl w-64 text-left"
+            className="absolute -right-8 top-1/2 p-4 bg-slate-800/90 backdrop-blur-xl border border-indigo-500/30 rounded-2xl shadow-xl w-64 text-left hidden sm:block"
           >
             <div className="flex items-center gap-2 mb-2">
               <BrainCircuit className="w-4 h-4 text-indigo-400" />
@@ -201,10 +201,6 @@ function LandingPage() {
 
 // ─── Root App ─────────────────────────────────────────────────────────────────
 function App() {
-  useEffect(() => {
-    document.documentElement.classList.add('dark');
-  }, []);
-
   return (
     <Router>
       <AuthProvider>

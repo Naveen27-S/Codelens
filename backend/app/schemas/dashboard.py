@@ -80,10 +80,13 @@ class DashboardStatsResponse(BaseModel):
     totalPrograms: int
     totalExecutions: int
     totalVisualizations: int
+    totalPracticed: int = 0
     learningHours: float
+    longestStreak: int = 0
     programsTrend: int
     executionsTrend: int
     visualizationsTrend: int
+    practiceTrend: int = 0
     learningTrend: int
 
 
@@ -128,6 +131,8 @@ class CalendarDayItem(BaseModel):
 class CalendarActivityResponse(BaseModel):
     days: List[CalendarDayItem]
     max_count: int  # used for intensity normalization in the UI
+
+
 # ── Dashboard History Schemas ──────────────────────────────────────────────────
 
 class DashboardHistoryEventCreate(BaseModel):
