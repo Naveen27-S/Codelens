@@ -32,6 +32,20 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+const STORAGE_KEY_DRAFTS = 'codelens_editor_drafts';
+const STORAGE_KEY_ACTIVE_LANG = 'codelens_editor_active_lang';
+const STORAGE_KEY_ACTIVE_PROBLEM = 'codelens_editor_active_problem_id';
+const STORAGE_KEY_STDIN = 'codelens_editor_stdin';
+
+function getStoredDrafts(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DRAFTS);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 export function EditorPage() {
@@ -54,9 +68,16 @@ export function EditorPage() {
   } | null;
 
   const [activeProblem, setActiveProblem] = useState<CodingProblem | null>(() => {
-    if (routerState?.problemId) {
-      const prob = getProblemById(routerState.problemId);
-      if (prob) {
+    let problemId = routerState?.problemId;
+    if (!problemId && !routerState?.code) {
+      try {
+        problemId = localStorage.getItem(STORAGE_KEY_ACTIVE_PROBLEM) || undefined;
+      } catch {}
+    }
+
+    if (problemId) {
+      const prob = getProblemById(problemId);
+      if (prob && routerState?.problemId) {
         // Track practice problem open in MongoDB
         recordUserActivity({
           activity_type: 'practice',
@@ -74,32 +95,87 @@ export function EditorPage() {
 
   const [language, setLanguage] = useState<string>(() => {
     if (routerState?.language) return routerState.language.toLowerCase();
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_ACTIVE_LANG);
+      if (stored) return stored.toLowerCase();
+    } catch {}
     return (settings.defaultLanguage || 'python').toLowerCase();
   });
 
   const [codeByLanguage, setCodeByLanguage] = useState<Record<string, string>>(() => {
-    const initialLang = (routerState?.language || settings.defaultLanguage || 'python').toLowerCase();
+    const storedDrafts = getStoredDrafts();
+    const initialLang = (
+      routerState?.language ||
+      (() => {
+        try { return localStorage.getItem(STORAGE_KEY_ACTIVE_LANG); } catch { return null; }
+      })() ||
+      settings.defaultLanguage ||
+      'python'
+    ).toLowerCase();
+
     let initialCode = '';
 
     if (routerState?.code !== undefined) {
       initialCode = routerState.code;
     } else if (routerState?.problemId) {
       const problem = getProblemById(routerState.problemId);
-      initialCode = problem?.starterCode[initialLang] || getDefaultStarterCode(initialLang);
+      const problemKey = `problem_${routerState.problemId}_${initialLang}`;
+      initialCode = storedDrafts[problemKey] || problem?.starterCode[initialLang] || getDefaultStarterCode(initialLang);
+    } else if (storedDrafts[initialLang] !== undefined) {
+      initialCode = storedDrafts[initialLang];
     } else {
       initialCode = getDefaultStarterCode(initialLang);
     }
 
     return {
+      ...storedDrafts,
       [initialLang]: initialCode,
     };
   });
 
   const [output, setOutput] = useState('');
   const [errorExplanation, setErrorExplanation] = useState<AIErrorExplanation | null>(null);
-  const [stdin, setStdin] = useState(() => routerState?.input || '');
+  const [stdin, setStdin] = useState(() => {
+    if (routerState?.input !== undefined) return routerState.input;
+    try {
+      return localStorage.getItem(STORAGE_KEY_STDIN) || '';
+    } catch {
+      return '';
+    }
+  });
   const [visualization, setVisualization] = useState(() => routerState?.visualization || '');
   const [clientExecutionResult, setClientExecutionResult] = useState<ExecutionResult | null>(null);
+
+  // ── Auto-save to localStorage so code NEVER disappears on tab change ──
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_DRAFTS, JSON.stringify(codeByLanguage));
+    } catch (e) {
+      console.warn('Failed to save code draft to localStorage', e);
+    }
+  }, [codeByLanguage]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ACTIVE_LANG, language);
+    } catch {}
+  }, [language]);
+
+  useEffect(() => {
+    try {
+      if (activeProblem?.id) {
+        localStorage.setItem(STORAGE_KEY_ACTIVE_PROBLEM, activeProblem.id);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_ACTIVE_PROBLEM);
+      }
+    } catch {}
+  }, [activeProblem]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_STDIN, stdin);
+    } catch {}
+  }, [stdin]);
 
 
 
@@ -111,49 +187,60 @@ export function EditorPage() {
   const consoleResizeStartY = useRef<number>(0);
   const consoleResizeStartH = useRef<number>(240);
 
-  const handleConsoleResizeStart = (e: React.MouseEvent) => {
+  const updateConsoleHeight = useCallback((clientY: number) => {
+    const delta = consoleResizeStartY.current - clientY; // dragging up gives positive delta -> increases height
+    const containerH = containerRef.current?.getBoundingClientRect().height || (window.innerHeight - 120);
+    // Allow expanding upwards almost completely to the top of editor
+    const maxH = Math.max(120, containerH - 70);
+    const minH = 38;
+    const newH = Math.max(minH, Math.min(maxH, consoleResizeStartH.current + delta));
+    
+    if (newH <= 50) {
+      setConsoleCollapsed(true);
+    } else {
+      setConsoleCollapsed(false);
+      setConsoleHeight(newH);
+    }
+  }, []);
+
+  const handleConsolePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     consoleResizeRef.current = true;
     consoleResizeStartY.current = e.clientY;
     consoleResizeStartH.current = consoleCollapsed ? 38 : consoleHeight;
     setIsConsoleResizing(true);
     
-    // Auto-uncollapse if user starts dragging
     if (consoleCollapsed) {
       setConsoleCollapsed(false);
     }
     
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+    
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
     
-    const onMove = (ev: MouseEvent) => {
+    const onPointerMove = (ev: PointerEvent) => {
       if (!consoleResizeRef.current) return;
-      const delta = consoleResizeStartY.current - ev.clientY; // dragging up gives positive delta -> increases height
-      const containerH = containerRef.current?.getBoundingClientRect().height || (window.innerHeight - 120);
-      // Allow expanding upwards almost completely to the top of editor
-      const maxH = Math.max(160, containerH - 50);
-      const minH = 38;
-      const newH = Math.max(minH, Math.min(maxH, consoleResizeStartH.current + delta));
-      
-      if (newH <= 45) {
-        setConsoleCollapsed(true);
-      } else {
-        setConsoleCollapsed(false);
-        setConsoleHeight(newH);
-      }
+      updateConsoleHeight(ev.clientY);
     };
     
-    const onUp = () => {
+    const cleanup = () => {
       consoleResizeRef.current = false;
       setIsConsoleResizing(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', onMove, true);
-      window.removeEventListener('mouseup', onUp, true);
+      window.removeEventListener('pointermove', onPointerMove, true);
+      window.removeEventListener('pointerup', cleanup, true);
+      window.removeEventListener('mousemove', onPointerMove as any, true);
+      window.removeEventListener('mouseup', cleanup, true);
     };
     
-    window.addEventListener('mousemove', onMove, true);
-    window.addEventListener('mouseup', onUp, true);
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('pointerup', cleanup, true);
+    window.addEventListener('mousemove', onPointerMove as any, true);
+    window.addEventListener('mouseup', cleanup, true);
   };
 
   const toggleConsoleCollapse = () => {
@@ -311,15 +398,10 @@ export function EditorPage() {
     if (!val) return true;
     const trimmed = val.trim();
     return (
-      trimmed === '' ||
       trimmed === '# Write your Python code here' ||
       trimmed === 'public class Main {\n    public static void main(String[] args) {\n        // Write your Java code here\n    }\n}' ||
       trimmed === '#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your C++ code here\n    return 0;\n}' ||
-      trimmed === '#include <stdio.h>\n\nint main() {\n    // Write your C code here\n    return 0;\n}' ||
-      trimmed.includes('Returned value from main():') ||
-      trimmed.includes('mainFunction(a, b)') ||
-      trimmed.includes('mainFunction(int a, int b)') ||
-      (trimmed.includes('def main(a, b):') && trimmed.includes('return a + b'))
+      trimmed === '#include <stdio.h>\n\nint main() {\n    // Write your C code here\n    return 0;\n}'
     );
   };
 
@@ -329,13 +411,11 @@ export function EditorPage() {
     : (activeProblem?.starterCode[language] || getDefaultStarterCode(language));
 
   // ── Auto-save feature ──
-  // If autoSave & notifyCodeSaved are enabled, code is automatically saved.
-  // If the user turns it OFF, code cannot be saved automatically.
+  // If autoSave is enabled, code is automatically saved locally and to backend drafts.
   const lastSavedCodeRef = useRef<string>(currentCode);
 
   useEffect(() => {
-    // If autoSave or notifyCodeSaved is OFF, the code cannot be saved automatically!
-    if (!settings.autoSave || !settings.notifyCodeSaved) {
+    if (!settings.autoSave) {
       return;
     }
 
@@ -373,10 +453,17 @@ export function EditorPage() {
 
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
-      setCodeByLanguage((prev) => ({
-        ...prev,
-        [language]: value,
-      }));
+      setCodeByLanguage((prev) => {
+        const next = {
+          ...prev,
+          [language]: value,
+          ...(activeProblem ? { [`problem_${activeProblem.id}_${language}`]: value } : {}),
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY_DRAFTS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
     }
   };
 
@@ -389,10 +476,14 @@ export function EditorPage() {
         return prev;
       }
       const starter = activeProblem?.starterCode[normalized] || getDefaultStarterCode(normalized);
-      return {
+      const next = {
         ...prev,
         [normalized]: starter,
       };
+      try {
+        localStorage.setItem(STORAGE_KEY_DRAFTS, JSON.stringify(next));
+      } catch {}
+      return next;
     });
   };
 
@@ -827,10 +918,17 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
 
   const handleReset = () => {
     const template = activeProblem?.starterCode[language] || getDefaultStarterCode(language);
-    setCodeByLanguage((prev) => ({
-      ...prev,
-      [language]: template,
-    }));
+    setCodeByLanguage((prev) => {
+      const next = {
+        ...prev,
+        [language]: template,
+        ...(activeProblem ? { [`problem_${activeProblem.id}_${language}`]: template } : {}),
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY_DRAFTS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
     setOutput('');
     setVisualization('');
     setClientExecutionResult(null);
@@ -905,6 +1003,14 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
         </div>
 
         <div className="flex items-center gap-2.5">
+          <div
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-lg text-xs text-slate-400 font-mono select-none"
+            title="Your code is automatically saved and preserved across tabs"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
+            <span>Auto-saved</span>
+          </div>
+
           <button
             onClick={handleFormatCode}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors text-xs text-slate-300 border border-slate-700 cursor-pointer"
@@ -962,11 +1068,11 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
       {/* Main Resizable Panel Section */}
       <div ref={containerRef} className="flex-1 flex overflow-hidden">
         {/* Left Column: Monaco Editor + LeetCode-Style Console Footer */}
-        <div className="flex-1 flex flex-col min-w-0" style={{ minWidth: showViz ? 300 : 0 }}>
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden" style={{ minWidth: showViz ? 300 : 0 }}>
 
           {/* Monaco Editor */}
           <div
-            className="flex-1 relative border-b border-slate-800"
+            className="flex-1 min-h-0 relative border-b border-slate-800 overflow-hidden"
             style={{ pointerEvents: isConsoleResizing ? 'none' : 'auto' }}
           >
             <Editor
@@ -989,11 +1095,11 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
           >
             {/* Drag-to-Resize Handle */}
             <div
-              onMouseDown={handleConsoleResizeStart}
-              className="flex items-center justify-center h-3 bg-slate-900/90 hover:bg-indigo-600/40 active:bg-indigo-600/60 cursor-row-resize group border-b border-slate-800 transition-colors flex-shrink-0 select-none"
+              onPointerDown={handleConsolePointerDown}
+              className="flex items-center justify-center h-3.5 bg-slate-900/90 hover:bg-indigo-600/40 active:bg-indigo-600/60 cursor-row-resize group border-b border-slate-800 transition-colors flex-shrink-0 select-none touch-none"
               title="Drag up to expand console, drag down to compress"
             >
-              <GripHorizontal className="w-5 h-3 text-slate-500 group-hover:text-indigo-300 transition-colors" />
+              <GripHorizontal className="w-5 h-3 text-slate-500 group-hover:text-indigo-300 transition-colors pointer-events-none" />
             </div>
 
             {/* Console Header Bar */}
@@ -1266,11 +1372,6 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
           ))}
         </AnimatePresence>
       </div>
-
-      {/* Fullscreen transparent drag overlay to ensure smooth dragging over Monaco and outside elements */}
-      {isConsoleResizing && (
-        <div className="fixed inset-0 z-[99999] cursor-row-resize select-none bg-transparent" />
-      )}
     </div>
   );
 }
