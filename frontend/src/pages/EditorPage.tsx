@@ -106,31 +106,58 @@ export function EditorPage() {
   // Resizable console footer height
   const [consoleHeight, setConsoleHeight] = useState(240);
   const [consoleCollapsed, setConsoleCollapsed] = useState(false);
+  const [isConsoleResizing, setIsConsoleResizing] = useState(false);
   const consoleResizeRef = useRef<boolean>(false);
   const consoleResizeStartY = useRef<number>(0);
   const consoleResizeStartH = useRef<number>(240);
 
   const handleConsoleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
     consoleResizeRef.current = true;
     consoleResizeStartY.current = e.clientY;
-    consoleResizeStartH.current = consoleHeight;
+    consoleResizeStartH.current = consoleCollapsed ? 38 : consoleHeight;
+    setIsConsoleResizing(true);
+    
+    // Auto-uncollapse if user starts dragging
+    if (consoleCollapsed) {
+      setConsoleCollapsed(false);
+    }
+    
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
+    
     const onMove = (ev: MouseEvent) => {
       if (!consoleResizeRef.current) return;
-      const delta = consoleResizeStartY.current - ev.clientY;
-      const newH = Math.max(120, Math.min(520, consoleResizeStartH.current + delta));
-      setConsoleHeight(newH);
+      const delta = consoleResizeStartY.current - ev.clientY; // dragging up gives positive delta -> increases height
+      const containerH = containerRef.current?.getBoundingClientRect().height || (window.innerHeight - 120);
+      // Allow expanding upwards almost completely to the top of editor
+      const maxH = Math.max(160, containerH - 50);
+      const minH = 38;
+      const newH = Math.max(minH, Math.min(maxH, consoleResizeStartH.current + delta));
+      
+      if (newH <= 45) {
+        setConsoleCollapsed(true);
+      } else {
+        setConsoleCollapsed(false);
+        setConsoleHeight(newH);
+      }
     };
+    
     const onUp = () => {
       consoleResizeRef.current = false;
+      setIsConsoleResizing(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('mouseup', onUp, true);
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('mouseup', onUp, true);
+  };
+
+  const toggleConsoleCollapse = () => {
+    setConsoleCollapsed((c) => !c);
   };
 
   const [isRunning, setIsRunning] = useState(false);
@@ -687,6 +714,7 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
   };
 
   const monacoOptions = useMemo(() => ({
+    automaticLayout: true,
     minimap: { enabled: settings.showMinimap },
     fontSize: settings.editorFontSize,
     fontFamily: `'${settings.editorFontFamily}', 'Fira Code', monospace`,
@@ -937,7 +965,10 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
         <div className="flex-1 flex flex-col min-w-0" style={{ minWidth: showViz ? 300 : 0 }}>
 
           {/* Monaco Editor */}
-          <div className="flex-1 relative border-b border-slate-800">
+          <div
+            className="flex-1 relative border-b border-slate-800"
+            style={{ pointerEvents: isConsoleResizing ? 'none' : 'auto' }}
+          >
             <Editor
               height="100%"
               language={settings.syntaxHighlighting ? getMonacoLanguage(language) : 'plaintext'}
@@ -959,14 +990,14 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
             {/* Drag-to-Resize Handle */}
             <div
               onMouseDown={handleConsoleResizeStart}
-              className="flex items-center justify-center h-2.5 bg-slate-900/80 hover:bg-indigo-900/30 cursor-row-resize group border-b border-slate-800 transition-colors flex-shrink-0"
-              title="Drag to resize console"
+              className="flex items-center justify-center h-3 bg-slate-900/90 hover:bg-indigo-600/40 active:bg-indigo-600/60 cursor-row-resize group border-b border-slate-800 transition-colors flex-shrink-0 select-none"
+              title="Drag up to expand console, drag down to compress"
             >
-              <GripHorizontal className="w-4 h-3 text-slate-600 group-hover:text-indigo-400 transition-colors" />
+              <GripHorizontal className="w-5 h-3 text-slate-500 group-hover:text-indigo-300 transition-colors" />
             </div>
 
             {/* Console Header Bar */}
-            <div className="h-9 flex items-center justify-between px-4 bg-slate-900/90 border-b border-slate-800 flex-shrink-0">
+            <div className="h-9 flex items-center justify-between px-4 bg-slate-900/90 border-b border-slate-800 flex-shrink-0 select-none">
               {/* Left: Label + Execution Status Badge */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
@@ -1019,9 +1050,9 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
                 )}
 
                 <button
-                  onClick={() => setConsoleCollapsed(c => !c)}
+                  onClick={toggleConsoleCollapse}
                   className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
-                  title={consoleCollapsed ? 'Expand console' : 'Collapse console'}
+                  title={consoleCollapsed ? 'Expand console' : 'Collapse console (Compress)'}
                 >
                   {consoleCollapsed
                     ? <ChevronUp className="w-3.5 h-3.5" />
@@ -1235,6 +1266,11 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Fullscreen transparent drag overlay to ensure smooth dragging over Monaco and outside elements */}
+      {isConsoleResizing && (
+        <div className="fixed inset-0 z-[99999] cursor-row-resize select-none bg-transparent" />
+      )}
     </div>
   );
 }

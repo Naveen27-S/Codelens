@@ -243,31 +243,28 @@
 /* ═══════════════════════════════════════════════════════════════════════════════
    WHOLE WEBSITE INTERFACE MOTION & TRANSITION SPEED
    ═══════════════════════════════════════════════════════════════════════════════ */
-.reduce-motion,
-.reduce-motion *,
-.reduce-motion *::before,
-.reduce-motion *::after {
+.reduce-motion *:not(.intensity-preview-box):not(.intensity-preview-box *):not(.speed-preview-box):not(.speed-preview-box *),
+.reduce-motion *::before:not(.intensity-preview-box *):not(.speed-preview-box *),
+.reduce-motion *::after:not(.intensity-preview-box *):not(.speed-preview-box *) {
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
 
-.subtle-motion,
-.subtle-motion *,
-.subtle-motion *::before,
-.subtle-motion *::after {
+.subtle-motion *:not(.intensity-preview-box):not(.intensity-preview-box *):not(.speed-preview-box):not(.speed-preview-box *),
+.subtle-motion *::before:not(.intensity-preview-box *):not(.speed-preview-box *),
+.subtle-motion *::after:not(.intensity-preview-box *):not(.speed-preview-box *) {
   animation-duration: 0.35s !important;
   transition-duration: 0.35s !important;
 }
 
-/* Always let intensity preview animations run at their full designed speed */
-.subtle-motion .intensity-subtle-bars .subtle-bar-1,
-.subtle-motion .intensity-subtle-bars .subtle-bar-2,
-.subtle-motion .intensity-subtle-bars .subtle-bar-3,
-.subtle-motion .intensity-full-dots .full-dot-1,
-.subtle-motion .intensity-full-dots .full-dot-2,
-.subtle-motion .intensity-full-dots .full-dot-3 {
-  animation-duration: unset !important;
+/* Settings preview boxes ALWAYS run at designed speeds */
+.intensity-preview-box,
+.intensity-preview-box *,
+.speed-preview-box,
+.speed-preview-box * {
+  animation-play-state: running !important;
+  animation-iteration-count: infinite !important;
 }
 
 

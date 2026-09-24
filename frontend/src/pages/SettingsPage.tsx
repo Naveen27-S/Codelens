@@ -11,7 +11,7 @@ import {
   Volume2, VolumeX, Gauge, Minus, Plus
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useSettings, type AppSettings, ACCENT_COLORS, type AccentColor, type AnimationIntensity } from '../context/SettingsContext';
+import { useSettings, type AppSettings, ACCENT_COLORS, type AccentColor, type AnimationIntensity, type UITransitionSpeed } from '../context/SettingsContext';
 import { generateCodeLensPDF, downloadJsonBackup } from '../utils/exportPdf';
 import { voiceNarrator } from '../services/voiceNarrator';
 import axios from 'axios';
@@ -309,6 +309,13 @@ function AppearanceSection() {
     { value: 'full',   label: 'Full',   desc: 'Rich micro-animations' },
   ];
 
+  const speedOptions: { value: UITransitionSpeed; label: string; desc: string; tag: string; icon: string; runnerClass: string }[] = [
+    { value: 'instant', label: 'Instant', desc: 'No transition delay', tag: '0ms', icon: '⚡', runnerClass: 'speed-runner-instant' },
+    { value: 'fast',    label: 'Fast',    desc: 'Snappy UI response',  tag: '100ms', icon: '🐇', runnerClass: 'speed-runner-fast' },
+    { value: 'normal',  label: 'Normal',  desc: 'Balanced & smooth',   tag: '200ms', icon: '🎯', runnerClass: 'speed-runner-normal' },
+    { value: 'relaxed', label: 'Relaxed', desc: 'Gentle & fluid',      tag: '350ms', icon: '🌊', runnerClass: 'speed-runner-relaxed' },
+  ];
+
   return (
     <>
       {/* ── Theme ─────────────────────────────────────────────────────────── */}
@@ -543,10 +550,64 @@ function AppearanceSection() {
                   <SavedBadge show={savedKey === 'animationIntensity'} />
                 </div>
 
+                {/* UI Transition Speed */}
+                <div className="py-4 border-t border-slate-800/60">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-200">UI Transition Speed</label>
+                      <p className="text-xs text-slate-500 mt-0.5">Controls the duration of theme switches, panel movements, and hover effects.</p>
+                    </div>
+                    {/* Live status badge */}
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full border border-slate-700 text-slate-400 bg-slate-900/60">
+                      Active: <span className="font-bold" style={{ color: 'var(--accent-color)' }}>
+                        {settings.uiTransitionSpeed.charAt(0).toUpperCase() + settings.uiTransitionSpeed.slice(1)} ({settings.uiTransitionSpeed === 'instant' ? '0ms' : settings.uiTransitionSpeed === 'fast' ? '100ms' : settings.uiTransitionSpeed === 'normal' ? '200ms' : '350ms'})
+                      </span>
+                    </span>
+                  </div>
+                  <div className="appearance-speed-grid">
+                    {speedOptions.map((opt) => {
+                      const isActive = settings.uiTransitionSpeed === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          id={`appearance-speed-${opt.value}`}
+                          className={`appearance-speed-card ${isActive ? 'active' : ''}`}
+                          onClick={() => save('uiTransitionSpeed', opt.value)}
+                        >
+                          <div className="speed-preview-box">
+                            <div className="speed-preview-track">
+                              <div className={`speed-preview-runner ${opt.runnerClass}`} />
+                            </div>
+                            <span className="speed-preview-tag">{opt.tag}</span>
+                          </div>
+                          <div className="speed-card-footer">
+                            <span className="appearance-speed-icon">{opt.icon}</span>
+                            <div className="speed-card-text">
+                              <span className="appearance-speed-label">{opt.label}</span>
+                              <span className="appearance-speed-desc">{opt.desc}</span>
+                            </div>
+                            {isActive && (
+                              <motion.span
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                className="speed-active-dot"
+                              />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <SavedBadge show={savedKey === 'uiTransitionSpeed'} />
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
 
+          {/* Reduced Motion accessibility */}
+          <SettingRow label="Reduced Motion" description="Minimize motion and disable non-essential animations for accessibility.">
+            <Toggle id="appearance-reduced-motion" checked={settings.reducedMotion} onChange={(v) => save('reducedMotion', v)} />
+          </SettingRow>
         </div>
       </SectionCard>
     </>
