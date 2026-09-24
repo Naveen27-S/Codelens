@@ -481,9 +481,6 @@ function CodeEditorSection() {
           <SettingRow label="Word Wrap" description="Wrap long lines within the visible editor area.">
             <Toggle id="editor-wordwrap" checked={settings.wordWrap} onChange={(v) => save('wordWrap', v)} />
           </SettingRow>
-          <SettingRow label="Format Code on Save" description="Auto-format code using the language formatter.">
-            <Toggle id="editor-formatsave" checked={settings.formatOnSave} onChange={(v) => save('formatOnSave', v)} />
-          </SettingRow>
         </div>
       </SectionCard>
 
