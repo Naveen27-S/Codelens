@@ -10,6 +10,11 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('codelens_jwt');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface DashboardStats {

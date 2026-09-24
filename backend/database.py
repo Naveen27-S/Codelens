@@ -1,5 +1,3 @@
-<<<<<<< Updated upstream
-=======
 import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -35,4 +33,3 @@ def test_mongodb_connection():
     except Exception as e:
         print("MongoDB connection failed:", e)
         return False
->>>>>>> Stashed changes

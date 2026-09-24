@@ -8,9 +8,6 @@ logger = logging.getLogger(__name__)
 _client = None
 _db = None
 
-<<<<<<< Updated upstream
-=======
-
 def _create_indexes(db) -> None:
     """
     Ensure required indexes exist on the executions, activities, and
@@ -57,7 +54,6 @@ def _create_indexes(db) -> None:
         logger.error("MongoDB index creation failed: %s", e)
 
 
->>>>>>> Stashed changes
 def get_mongodb():
     """
     Returns the MongoDB database instance.

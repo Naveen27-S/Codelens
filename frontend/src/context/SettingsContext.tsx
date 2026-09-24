@@ -1,14 +1,22 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type AccentColor = 'indigo' | 'violet' | 'blue' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'orange';
+export type AnimationIntensity = 'none' | 'subtle' | 'full';
+export type UITransitionSpeed = 'instant' | 'fast' | 'normal' | 'relaxed';
+
 export interface AppSettings {
   // Appearance
   theme: 'dark' | 'light' | 'system';
+  accentColor: AccentColor;
   editorFontSize: number;
   editorFontFamily: string;
   animationsEnabled: boolean;
+  animationIntensity: AnimationIntensity;
+  uiTransitionSpeed: UITransitionSpeed;
+  reducedMotion: boolean;
 
   // Code Editor
   autoSave: boolean;
@@ -48,12 +56,36 @@ export interface AppSettings {
   notifyCodeSaved: boolean;
 }
 
+// ─── Accent color palette map ─────────────────────────────────────────────────
+export const ACCENT_COLORS: Record<AccentColor, { name: string; hex: string; rgb: string; hoverHex: string }> = {
+  indigo:  { name: 'Indigo',  hex: '#6366f1', rgb: '99,102,241',  hoverHex: '#818cf8' },
+  violet:  { name: 'Violet',  hex: '#8b5cf6', rgb: '139,92,246',  hoverHex: '#a78bfa' },
+  blue:    { name: 'Blue',    hex: '#3b82f6', rgb: '59,130,246',  hoverHex: '#60a5fa' },
+  cyan:    { name: 'Cyan',    hex: '#06b6d4', rgb: '6,182,212',   hoverHex: '#22d3ee' },
+  emerald: { name: 'Emerald', hex: '#10b981', rgb: '16,185,129',  hoverHex: '#34d399' },
+  amber:   { name: 'Amber',   hex: '#f59e0b', rgb: '245,158,11',  hoverHex: '#fbbf24' },
+  rose:    { name: 'Rose',    hex: '#f43f5e', rgb: '244,63,94',   hoverHex: '#fb7185' },
+  orange:  { name: 'Orange',  hex: '#f97316', rgb: '249,115,22',  hoverHex: '#fb923c' },
+};
+
+// ─── Transition speed map ─────────────────────────────────────────────────────
+export const TRANSITION_SPEEDS: Record<UITransitionSpeed, { label: string; ms: number }> = {
+  instant: { label: 'Instant', ms: 0 },
+  fast:    { label: 'Fast',    ms: 100 },
+  normal:  { label: 'Normal',  ms: 200 },
+  relaxed: { label: 'Relaxed', ms: 350 },
+};
+
 export const DEFAULT_SETTINGS: AppSettings = {
   // Appearance
   theme: 'dark',
+  accentColor: 'indigo',
   editorFontSize: 14,
   editorFontFamily: 'JetBrains Mono',
   animationsEnabled: true,
+  animationIntensity: 'full',
+  uiTransitionSpeed: 'normal',
+  reducedMotion: false,
 
   // Code Editor
   autoSave: true,
@@ -76,7 +108,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiTutorEnabled: true,
   explanationLevel: 'intermediate',
   explainEveryStep: false,
-  aiLanguage: 'English (US)',
+  aiLanguage: 'English',
   aiVoiceEnabled: false,
   voiceSpeed: 1.0,
 
@@ -99,6 +131,8 @@ const SETTINGS_KEY = 'codelens_settings';
 
 interface SettingsContextValue {
   settings: AppSettings;
+  resolvedTheme: 'dark' | 'light';
+  currentAccent: { name: string; hex: string; rgb: string; hoverHex: string };
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
   resetSettings: () => void;
 }
@@ -126,6 +160,62 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
+  // ─── Apply theme to DOM ────────────────────────────────────────────────────
+  const resolvedTheme = useMemo(() => {
+    if (settings.theme === 'system') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return settings.theme;
+  }, [settings.theme]);
+
+  // Listen for system theme changes when using 'system'
+  useEffect(() => {
+    if (settings.theme !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => {
+      // Force re-render by "touching" a setting (identity update)
+      setSettings((prev) => ({ ...prev }));
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [settings.theme]);
+
+  // Apply data-theme attribute + accent CSS custom properties
+  useEffect(() => {
+    const root = document.documentElement;
+
+    // Theme class
+    root.classList.remove('dark', 'light');
+    root.classList.add(resolvedTheme);
+    root.setAttribute('data-theme', resolvedTheme);
+
+    // Accent color
+    const accent = ACCENT_COLORS[settings.accentColor] ?? ACCENT_COLORS.indigo;
+    root.style.setProperty('--accent-color', accent.hex);
+    root.style.setProperty('--accent-color-rgb', accent.rgb);
+    root.style.setProperty('--accent-hover', accent.hoverHex);
+
+    // Editor font (available globally via var)
+    root.style.setProperty('--editor-font-family', `'${settings.editorFontFamily}', 'Fira Code', monospace`);
+    root.style.setProperty('--editor-font-size', `${settings.editorFontSize}px`);
+
+    // Animation / transition speed
+    const speed = TRANSITION_SPEEDS[settings.uiTransitionSpeed] ?? TRANSITION_SPEEDS.normal;
+    root.style.setProperty('--ui-transition-speed', `${speed.ms}ms`);
+
+    if (settings.reducedMotion || !settings.animationsEnabled || settings.animationIntensity === 'none') {
+      root.classList.add('reduce-motion');
+    } else {
+      root.classList.remove('reduce-motion');
+    }
+
+    if (settings.animationIntensity === 'subtle') {
+      root.classList.add('subtle-motion');
+    } else {
+      root.classList.remove('subtle-motion');
+    }
+  }, [resolvedTheme, settings.accentColor, settings.editorFontFamily, settings.editorFontSize, settings.uiTransitionSpeed, settings.animationsEnabled, settings.animationIntensity, settings.reducedMotion]);
+
   const updateSetting = useCallback(
     <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
       setSettings((prev) => ({ ...prev, [key]: value }));
@@ -138,8 +228,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
   }, []);
 
+  const currentAccent = ACCENT_COLORS[settings.accentColor] ?? ACCENT_COLORS.indigo;
+
   return (
-    <SettingsContext.Provider value={{ settings, updateSetting, resetSettings }}>
+    <SettingsContext.Provider value={{ settings, resolvedTheme, currentAccent, updateSetting, resetSettings }}>
       {children}
     </SettingsContext.Provider>
   );

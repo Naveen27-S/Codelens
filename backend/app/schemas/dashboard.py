@@ -128,10 +128,6 @@ class CalendarDayItem(BaseModel):
 class CalendarActivityResponse(BaseModel):
     days: List[CalendarDayItem]
     max_count: int  # used for intensity normalization in the UI
-<<<<<<< Updated upstream
-=======
-
-
 # ── Dashboard History Schemas ──────────────────────────────────────────────────
 
 class DashboardHistoryEventCreate(BaseModel):
@@ -179,4 +175,3 @@ class SessionTimeRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
 
->>>>>>> Stashed changes

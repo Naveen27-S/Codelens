@@ -1104,8 +1104,6 @@
   .dash-header h1 { font-size: 20px; }
   .activity-week-stats { grid-template-columns: repeat(2, 1fr); }
 }
-<<<<<<< Updated upstream
-=======
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    LIGHT THEME: DashboardPage Overrides
@@ -1896,5 +1894,3 @@
   color: #0f172a;
 }
 
-
->>>>>>> Stashed changes

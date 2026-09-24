@@ -91,10 +91,6 @@ def delete_program(
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Program not found")
     return {"status": "success", "message": "Program deleted successfully"}
-<<<<<<< Updated upstream
-=======
-
-
 @router.delete("", status_code=status.HTTP_200_OK)
 @router.delete("/", status_code=status.HTTP_200_OK)
 def clear_all_programs(
@@ -113,4 +109,3 @@ def clear_all_programs(
     }
 
 
->>>>>>> Stashed changes

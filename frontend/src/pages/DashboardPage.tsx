@@ -11,7 +11,7 @@
  *  - "Solve" loads a practice problem into EditorPage
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Code2, Flame, Eye, BookOpen, BrainCircuit,

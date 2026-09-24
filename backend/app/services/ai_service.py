@@ -8,10 +8,6 @@ def get_gemini_model():
     # Use gemini-2.5-flash as default, or whatever is preferred
     return genai.GenerativeModel('gemini-2.5-flash')
 
-<<<<<<< Updated upstream
-def explain_code(language: str, code: str) -> str:
-=======
-
 # ---------------------------------------------------------------------------
 # Rule-based fallback error explainer
 # Provides plain-English explanations when Gemini is unavailable.
@@ -153,7 +149,6 @@ def explain_code(language: str, code: str, explanation_level: str = "intermediat
         - Focus: Important control flow, variable state changes, function roles, edge cases, and standard time/space complexity.
         """
 
->>>>>>> Stashed changes
     try:
         model = get_gemini_model()
         prompt = f"""

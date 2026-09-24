@@ -7,6 +7,7 @@
 export interface CodingProblem {
   id: string;
   title: string;
+  category?: string;
   difficulty?: 'Beginner' | 'Intermediate' | 'Advanced' | 'Easy' | 'Medium' | 'Hard';
   description?: string;
   starterCode: Record<string, string>;

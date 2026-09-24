@@ -255,14 +255,8 @@ def get_recent_activities(user_id: int, limit: int = 10, db: Session = None) -> 
         ))
     return items
 
-<<<<<<< Updated upstream
-def get_streak_info(user_id: int, db: Session = None) -> StreakResponse:
-    """Calculate user's current consecutive practice days and longest streak from MongoDB activities."""
-=======
-
 def get_streak_info(user_id: int, db: Session = None) -> StreakResponse:
     """Calculate user's current consecutive practice days and longest streak from MongoDB activities, executions, programs, and dashboard visits."""
->>>>>>> Stashed changes
     mongo_db = get_mongodb()
     if mongo_db is None:
         return StreakResponse(
@@ -496,42 +490,21 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
     start_this_week = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
     start_last_week = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-<<<<<<< Updated upstream
-    # Total programs saved in MongoDB
-    hist_count = mongo_db.programs.count_documents({"user_id": user_id})
-=======
     user_q = _user_query(user_id)
 
     # ── 1. Programs Saved (programs collection) ───────────────────────────────
     hist_count = mongo_db.programs.count_documents(user_q)
->>>>>>> Stashed changes
-
     # Total executions in MongoDB
     exec_count = mongo_db.activities.count_documents({
         "$and": [user_q, {"activity_type": {"$in": ["code_execution", "execution"]}}]
     })
-<<<<<<< Updated upstream
-=======
     exec_direct = mongo_db.executions.count_documents(user_q)
     total_exec = max(exec_count, exec_direct)
->>>>>>> Stashed changes
-
     # Total visualizations in MongoDB
     viz_count = mongo_db.activities.count_documents({
         "$and": [user_q, {"activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}}]
     })
 
-<<<<<<< Updated upstream
-    # Sum learning hours in MongoDB
-    pipeline = [
-        {"$match": {"user_id": user_id}},
-        {"$group": {"_id": None, "total": {"$sum": "$duration_seconds"}}}
-    ]
-    res = list(mongo_db.activities.aggregate(pipeline))
-    total_seconds = float(res[0]["total"]) if res and res[0]["total"] is not None else 0.0
-    learning_hours = round(total_seconds / 3600.0, 1)
-
-=======
     # ── 4. Programs Practiced ────────────────────────────────────────────────
     practice_count = mongo_db.activities.count_documents({
         "$and": [user_q, {"activity_type": {"$in": ["practice", "practice_completed", "code_execution", "execution"]}}]
@@ -551,42 +524,19 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
     longest_streak = streak_info.longest_streak
 
     # ── 7. Week-over-week trend helper ────────────────────────────────────────
->>>>>>> Stashed changes
     def calc_trend(this_w: int, last_w: int) -> int:
         if last_w == 0:
             return 12 if this_w > 0 else 0
         return int(((this_w - last_w) / last_w) * 100)
 
     this_w_exec = mongo_db.activities.count_documents({
-<<<<<<< Updated upstream
-        "user_id": user_id,
-        "started_at": {"$gte": start_this_week},
-        "activity_type": {"$in": ["code_execution", "execution"]}
-    })
-    last_w_exec = mongo_db.activities.count_documents({
-        "user_id": user_id,
-        "started_at": {"$gte": start_last_week, "$lt": start_this_week},
-        "activity_type": {"$in": ["code_execution", "execution"]}
-=======
         "$and": [user_q, {"started_at": {"$gte": start_this_week}}, {"activity_type": {"$in": ["code_execution", "execution"]}}]
     })
     last_w_exec = mongo_db.activities.count_documents({
         "$and": [user_q, {"started_at": {"$gte": start_last_week, "$lt": start_this_week}}, {"activity_type": {"$in": ["code_execution", "execution"]}}]
->>>>>>> Stashed changes
     })
 
     this_w_viz = mongo_db.activities.count_documents({
-<<<<<<< Updated upstream
-        "user_id": user_id,
-        "started_at": {"$gte": start_this_week},
-        "activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}
-    })
-    last_w_viz = mongo_db.activities.count_documents({
-        "user_id": user_id,
-        "started_at": {"$gte": start_last_week, "$lt": start_this_week},
-        "activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}
-    })
-=======
         "$and": [user_q, {"started_at": {"$gte": start_this_week}}, {"activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}}]
     })
     last_w_viz = mongo_db.activities.count_documents({
@@ -604,8 +554,6 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
     last_w_prac = mongo_db.activities.count_documents({
         "$and": [user_q, {"started_at": {"$gte": start_last_week, "$lt": start_this_week}}, {"activity_type": {"$in": ["practice", "practice_completed", "code_execution"]}}]
     })
->>>>>>> Stashed changes
-
     return DashboardStatsResponse(
         totalPrograms=hist_count,
         totalExecutions=exec_count,
@@ -614,12 +562,8 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
         programsTrend=12 if hist_count > 0 else 0,
         executionsTrend=calc_trend(this_w_exec, last_w_exec),
         visualizationsTrend=calc_trend(this_w_viz, last_w_viz),
-<<<<<<< Updated upstream
-        learningTrend=8 if learning_hours > 0 else 0
-=======
         practiceTrend=calc_trend(this_w_prac, last_w_prac),
         learningTrend=calc_trend(int(total_seconds), int(total_seconds * 0.8))
->>>>>>> Stashed changes
     )
 
 def get_calendar_activity(user_id: int, days: int = 180, db: Session = None) -> CalendarActivityResponse:
@@ -659,10 +603,6 @@ def get_calendar_activity(user_id: int, days: int = 180, db: Session = None) -> 
         {"$sort": {"_id": 1}}
     ]
 
-<<<<<<< Updated upstream
-    results = list(mongo_db.activities.aggregate(pipeline))
-    day_map: Dict[str, int] = {r["_id"]: r["count"] for r in results}
-=======
     # 2. Also ensure any executions from mongo_db.executions are counted
     for doc in mongo_db.executions.find(user_q, {"created_at": 1}):
         d_str = extract_date(doc.get("created_at"))
@@ -680,8 +620,6 @@ def get_calendar_activity(user_id: int, days: int = 180, db: Session = None) -> 
         d_str = extract_date(doc.get("created_at"))
         if d_str:
             day_map[d_str] = day_map.get(d_str, 0) + 1
->>>>>>> Stashed changes
-
     calendar_days: List[CalendarDayItem] = []
     max_count = 0
     for i in range(days, -1, -1):

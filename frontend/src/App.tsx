@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Terminal, Code2, Zap, BrainCircuit, PlayCircle, LogIn, LogOut, User } from 'lucide-react';
 import { useEffect, useState } from 'react';

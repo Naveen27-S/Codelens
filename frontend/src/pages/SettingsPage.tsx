@@ -11,13 +11,9 @@ import {
   Volume2, VolumeX, Gauge, Minus, Plus
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-<<<<<<< Updated upstream
 import { useSettings, type AppSettings } from '../context/SettingsContext';
-=======
-import { useSettings, type AppSettings, ACCENT_COLORS, type AccentColor, type AnimationIntensity } from '../context/SettingsContext';
 import { generateCodeLensPDF, downloadJsonBackup } from '../utils/exportPdf';
 import { voiceNarrator } from '../services/voiceNarrator';
->>>>>>> Stashed changes
 import axios from 'axios';
 import './SettingsPage.css';
 

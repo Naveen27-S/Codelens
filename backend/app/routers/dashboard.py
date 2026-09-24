@@ -19,14 +19,11 @@ from ..schemas.dashboard import (
     LanguageProgressResponse,
     RecommendationResponse,
     CalendarActivityResponse,
-<<<<<<< Updated upstream
-=======
     DashboardHistoryEventCreate,
     DashboardHistoryEventResponse,
     DashboardHistoryListResponse,
     DashboardHistoryStatsResponse,
     SessionTimeRequest,
->>>>>>> Stashed changes
 )
 from ..services import activity_service
 

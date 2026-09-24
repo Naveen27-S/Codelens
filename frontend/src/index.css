@@ -8,8 +8,6 @@
   --color-dark-surface: #1e293b;
 }
 
-<<<<<<< Updated upstream
-=======
 /* ═══════════════════════════════════════════════════════════════════════════════
    GLOBAL CSS VARIABLES (Theme, Accent, Typography, Motion)
    ═══════════════════════════════════════════════════════════════════════════════ */
@@ -272,8 +270,6 @@
   animation-duration: unset !important;
 }
 
-
->>>>>>> Stashed changes
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
