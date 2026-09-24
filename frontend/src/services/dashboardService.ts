@@ -434,6 +434,51 @@ export async function recordUserActivity(activity: {
 }
 
 /**
+ * Record active session time / heartbeat to track practice time and accessing history.
+ */
+export async function recordSessionTime(session: {
+  duration_seconds: number;
+  language?: string;
+  topic?: string | null;
+  activity_type?: string;
+  title?: string;
+  description?: string;
+}): Promise<UserActivityItem | null> {
+  try {
+    const res = await axios.post<UserActivityItem>(
+      `${API_URL}/dashboard/session-time`,
+      session,
+      { headers: authHeaders() }
+    );
+    return res.data;
+  } catch (err) {
+    console.warn('Could not record session time:', err);
+    return null;
+  }
+}
+
+/**
+ * Fetch paginated practice time / accessing history.
+ */
+export async function fetchPracticeTimeHistory(options: ActivityFilterOptions = {}): Promise<ActivityListResult> {
+  const { date_range, page = 1, limit = 10 } = options;
+  const params = new URLSearchParams();
+  if (date_range && date_range !== 'all') params.append('date_range', date_range);
+  params.append('page', String(page));
+  params.append('limit', String(limit));
+
+  try {
+    const res = await axios.get<ActivityListResult>(
+      `${API_URL}/dashboard/practice-time/history?${params.toString()}`,
+      { headers: authHeaders() }
+    );
+    return res.data;
+  } catch {
+    return fetchFullActivities({ ...options, activity_type: 'practice' });
+  }
+}
+
+/**
  * Fetch chronological recent activities for the timeline.
  */
 export async function fetchRecentActivities(limit: number = 10): Promise<UserActivityItem[]> {

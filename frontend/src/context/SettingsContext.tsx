@@ -76,7 +76,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiTutorEnabled: true,
   explanationLevel: 'intermediate',
   explainEveryStep: false,
-  aiLanguage: 'English',
+  aiLanguage: 'English (US)',
   aiVoiceEnabled: false,
   voiceSpeed: 1.0,
 

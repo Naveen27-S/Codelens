@@ -11,7 +11,7 @@ def api_explain_code(
     req: AIExplainRequest,
     current_user: User = Depends(get_current_user)
 ):
-    explanation = explain_code(req.language, req.code)
+    explanation = explain_code(req.language, req.code, req.explanation_level or "intermediate")
     return {"explanation": explanation}
 
 @router.post("/debug", response_model=AIResponse)

@@ -17,7 +17,12 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
     label: 'Python',
     monacoLanguage: 'python',
     extension: '.py',
+<<<<<<< Updated upstream
     starterCode: '# Write your Python code here\n',
+=======
+    starterCode: `# Write your Python code here
+`,
+>>>>>>> Stashed changes
   },
   java: {
     id: 'java',
@@ -26,11 +31,32 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
     extension: '.java',
     starterCode: `public class Main {
     public static void main(String[] args) {
+<<<<<<< Updated upstream
 
+=======
+        // Write your Java code here
+>>>>>>> Stashed changes
     }
 }
 `,
   },
+<<<<<<< Updated upstream
+=======
+  cpp: {
+    id: 'cpp',
+    label: 'C++ (JSCPP Wasm Interpreter)',
+    monacoLanguage: 'cpp',
+    extension: '.cpp',
+    starterCode: `#include <iostream>
+using namespace std;
+
+int main() {
+    // Write your C++ code here
+    return 0;
+}
+`,
+  },
+>>>>>>> Stashed changes
   c: {
     id: 'c',
     label: 'C',
@@ -38,6 +64,7 @@ export const SUPPORTED_LANGUAGES: Record<string, LanguageConfig> = {
     extension: '.c',
     starterCode: `#include <stdio.h>
 
+<<<<<<< Updated upstream
 int main() {
 
     return 0;
@@ -54,6 +81,10 @@ using namespace std;
 
 int main() {
 
+=======
+int main() {
+    // Write your C code here
+>>>>>>> Stashed changes
     return 0;
 }
 `,

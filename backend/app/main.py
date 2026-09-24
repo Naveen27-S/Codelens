@@ -4,8 +4,15 @@ from .core.config import settings
 from .core.database import engine, Base
 from .routers import auth, execute, history, ai, dashboard, programs
 
-# Create all MySQL tables on startup (if they don't exist yet)
-Base.metadata.create_all(bind=engine)
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Attempt to create legacy MySQL tables if available; do not block startup
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    logger.warning("Optional SQL tables not initialized: %s", e)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

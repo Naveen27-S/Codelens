@@ -19,6 +19,14 @@ from ..schemas.dashboard import (
     LanguageProgressResponse,
     RecommendationResponse,
     CalendarActivityResponse,
+<<<<<<< Updated upstream
+=======
+    DashboardHistoryEventCreate,
+    DashboardHistoryEventResponse,
+    DashboardHistoryListResponse,
+    DashboardHistoryStatsResponse,
+    SessionTimeRequest,
+>>>>>>> Stashed changes
 )
 from ..services import activity_service
 
@@ -33,6 +41,26 @@ def record_activity(
 ):
     """Record an automatic user activity event (Run Code, Visualize, Practice, etc.)."""
     return activity_service.create_activity(db=db, user_id=current_user.id, data=req)
+
+
+@router.post("/session-time", response_model=ActivityResponse)
+def record_user_session_time(
+    req: SessionTimeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Record active user platform / editor practice time."""
+    result = activity_service.record_session_time(
+        user_id=current_user.id,
+        duration_seconds=req.duration_seconds,
+        activity_type=req.activity_type or "practice",
+        language=req.language,
+        topic=req.topic,
+        title=req.title,
+        description=req.description,
+        db=db,
+    )
+    return ActivityResponse(**result)
 
 
 @router.get("/activity", response_model=ActivityListResponse)
@@ -179,36 +207,54 @@ def get_recent_visualizations(
 def get_learning_progress(
     current_user: User = Depends(get_current_user),
 ):
-    """Retrieve learning progress across languages and concepts based on MongoDB activities."""
+    """Retrieve learning progress across languages and concepts based on MongoDB activities, executions, and programs."""
     from ..database.mongodb import get_mongodb
+    from ..services.activity_service import _user_query
     mongo_db = get_mongodb()
+    if mongo_db is None:
+        return [
+            LanguageProgressResponse(label="Python", percentage=25, color="bg-indigo-500"),
+            LanguageProgressResponse(label="Java", percentage=20, color="bg-violet-500"),
+            LanguageProgressResponse(label="C / C++", percentage=20, color="bg-cyan-500"),
+            LanguageProgressResponse(label="Data Structures", percentage=20, color="bg-emerald-500"),
+            LanguageProgressResponse(label="Algorithms", percentage=15, color="bg-amber-500"),
+        ]
 
-    py_count = mongo_db.activities.count_documents({
-        "user_id": current_user.id,
-        "language": {"$regex": "python", "$options": "i"}
-    })
-    java_count = mongo_db.activities.count_documents({
-        "user_id": current_user.id,
-        "language": {"$regex": "java", "$options": "i"}
-    })
+    user_q = _user_query(current_user.id)
+
+    py_count = (
+        mongo_db.activities.count_documents({"$and": [user_q, {"language": {"$regex": "python", "$options": "i"}}]})
+        + mongo_db.executions.count_documents({"$and": [user_q, {"language": {"$regex": "python", "$options": "i"}}]})
+    )
+    java_count = (
+        mongo_db.activities.count_documents({"$and": [user_q, {"language": {"$regex": "java", "$options": "i"}}]})
+        + mongo_db.executions.count_documents({"$and": [user_q, {"language": {"$regex": "java", "$options": "i"}}]})
+    )
+    c_cpp_count = (
+        mongo_db.activities.count_documents({"$and": [user_q, {"language": {"$regex": "(^c$|^cpp$|c\\+\\+)", "$options": "i"}}]})
+        + mongo_db.executions.count_documents({"$and": [user_q, {"language": {"$regex": "(^c$|^cpp$|c\\+\\+)", "$options": "i"}}]})
+    )
     
     ds_topics = ["Arrays", "Linked Lists", "Stacks", "Queues", "Trees", "Graphs"]
     ds_count = mongo_db.activities.count_documents({
-        "user_id": current_user.id,
-        "topic": {"$in": ds_topics}
+        "$and": [user_q, {"topic": {"$in": ds_topics}}]
     })
     
     algo_topics = ["Sorting", "Recursion", "Binary Search", "Dynamic Programming"]
     algo_count = mongo_db.activities.count_documents({
-        "user_id": current_user.id,
-        "topic": {"$in": algo_topics}
+        "$and": [user_q, {"topic": {"$in": algo_topics}}]
     })
 
+    # Total user activities for scaling
+    total_acts = mongo_db.activities.count_documents(user_q) + mongo_db.executions.count_documents(user_q)
+    base_progress = min(40, max(15, total_acts * 4))
+
     return [
-        LanguageProgressResponse(label="Python", percentage=min(100, max(25, py_count * 8)), color="bg-indigo-500"),
-        LanguageProgressResponse(label="Java", percentage=min(100, max(15, java_count * 8)), color="bg-violet-500"),
-        LanguageProgressResponse(label="Data Structures", percentage=min(100, max(20, ds_count * 10)), color="bg-emerald-500"),
-        LanguageProgressResponse(label="Algorithms", percentage=min(100, max(10, algo_count * 10)), color="bg-amber-500"),
+        LanguageProgressResponse(label="Python", percentage=min(100, max(25, py_count * 8 + (5 if py_count > 0 else 0))), color="bg-indigo-500"),
+        LanguageProgressResponse(label="Java", percentage=min(100, max(20, java_count * 8 + (5 if java_count > 0 else 0))), color="bg-violet-500"),
+        LanguageProgressResponse(label="C / C++", percentage=min(100, max(15, c_cpp_count * 8 + (5 if c_cpp_count > 0 else 0))), color="bg-cyan-500"),
+        LanguageProgressResponse(label="Data Structures", percentage=min(100, max(20, ds_count * 10 + (base_progress // 2))), color="bg-emerald-500"),
+        LanguageProgressResponse(label="Algorithms", percentage=min(100, max(15, algo_count * 10 + (base_progress // 2))), color="bg-amber-500"),
     ]
 
 

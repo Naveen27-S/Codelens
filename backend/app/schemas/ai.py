@@ -4,6 +4,7 @@ from typing import Optional
 class AIExplainRequest(BaseModel):
     language: str
     code: str
+    explanation_level: Optional[str] = "intermediate"
 
 class AIVisualizeRequest(BaseModel):
     language: str

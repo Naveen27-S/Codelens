@@ -139,3 +139,23 @@ def delete_execution(
         
     mongo_db.executions.delete_one({"execution_id": execution_id})
     return {"message": "Execution record deleted successfully", "execution_id": execution_id}
+
+
+@router.delete("/executions")
+def clear_all_executions(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete all execution records for the authenticated user.
+    """
+    mongo_db = get_mongodb()
+    if mongo_db is None:
+        raise HTTPException(status_code=503, detail="MongoDB service unavailable")
+    
+    result = mongo_db.executions.delete_many({"user_id": current_user.id})
+    return {
+        "status": "success",
+        "message": f"Successfully cleared {result.deleted_count} execution records.",
+        "deleted_count": result.deleted_count
+    }
+

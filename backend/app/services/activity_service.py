@@ -16,6 +16,34 @@ from ..schemas.dashboard import (
     CalendarActivityResponse,
 )
 
+def _user_query(user_id: Any) -> dict:
+    """Query MongoDB for user_id matching both integer and string formats."""
+    try:
+        u_int = int(user_id)
+        return {"$or": [{"user_id": u_int}, {"user_id": str(user_id)}]}
+    except (ValueError, TypeError):
+        return {"user_id": user_id}
+
+def get_effective_duration(doc: dict) -> float:
+    """Calculate realistic practice duration in seconds for an activity document."""
+    raw = doc.get("duration_seconds")
+    try:
+        raw_float = float(raw) if raw is not None else 0.0
+    except (ValueError, TypeError):
+        raw_float = 0.0
+
+    act_type = str(doc.get("activity_type") or "").lower()
+    # Floor sub-second raw CPU runner times to realistic coding/practice session time (minimum 60s)
+    if act_type in ("code_execution", "execution") and raw_float < 30.0:
+        return 60.0
+    if act_type in ("visualization_completed", "visualization") and raw_float < 30.0:
+        return 60.0
+    if act_type in ("practice", "practice_completed") and raw_float < 60.0:
+        return 120.0
+    if raw_float <= 0.0:
+        return 60.0
+    return raw_float
+
 def format_duration(seconds: float) -> str:
     """Format seconds into user friendly 'Xh Ym' or 'Xm' string."""
     if not seconds or seconds <= 0:
@@ -24,7 +52,9 @@ def format_duration(seconds: float) -> str:
     minutes = int((seconds % 3600) // 60)
     if hours > 0:
         return f"{hours}h {minutes}m"
-    return f"{minutes}m" if minutes > 0 else f"{int(seconds)}s"
+    if minutes > 0:
+        return f"{minutes}m"
+    return "1m" if seconds > 0 else "0m"
 
 def create_activity(user_id: int, data: ActivityCreate, db: Session = None) -> Dict[str, Any]:
     """Record an automatic user activity event in MongoDB."""
@@ -38,24 +68,30 @@ def create_activity(user_id: int, data: ActivityCreate, db: Session = None) -> D
 
     if duration is None and data.completed_at and data.started_at:
         duration = (data.completed_at - data.started_at).total_seconds()
-    elif duration is None:
-        # Default nominal duration based on activity type if not provided
+    elif duration is None or (duration < 10.0 and data.activity_type in ("code_execution", "practice", "visualization_completed")):
+        # Default nominal duration based on activity type if not provided or sub-second execution
         duration_map = {
-            "code_execution": 5.0,
-            "visualization_completed": 30.0,
-            "ai_tutor": 120.0,
+            "code_execution": 60.0,
+            "visualization_completed": 60.0,
+            "ai_tutor": 180.0,
             "practice": 180.0,
-            "program_saved": 10.0,
-            "editor_open": 15.0,
+            "program_saved": 30.0,
+            "editor_open": 30.0,
         }
-        duration = duration_map.get(data.activity_type, 15.0)
+        duration = max(float(duration or 0), duration_map.get(data.activity_type, 60.0))
 
-    completed_at = data.completed_at or (started + timedelta(seconds=duration))
+    completed_at = data.completed_at or (started + timedelta(seconds=float(duration)))
     if completed_at.tzinfo is None:
         completed_at = completed_at.replace(tzinfo=timezone.utc)
 
+    # Normalize user_id to integer if possible
+    try:
+        norm_user_id = int(user_id)
+    except (ValueError, TypeError):
+        norm_user_id = user_id
+
     activity_doc = {
-        "user_id": user_id,
+        "user_id": norm_user_id,
         "activity_type": data.activity_type,
         "title": data.title,
         "description": data.description,
@@ -78,6 +114,34 @@ def create_activity(user_id: int, data: ActivityCreate, db: Session = None) -> D
     activity_doc["id"] = str(res.inserted_id)
     return activity_doc
 
+def record_session_time(
+    user_id: int,
+    duration_seconds: float,
+    activity_type: str = "practice",
+    language: Optional[str] = None,
+    topic: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    db: Session = None
+) -> Dict[str, Any]:
+    """Record active user platform / editor practice time."""
+    now = datetime.now(timezone.utc)
+    dur = max(1.0, float(duration_seconds))
+    started = now - timedelta(seconds=dur)
+    act_data = ActivityCreate(
+        activity_type=activity_type,
+        title=title or f"Active Practice Session ({format_duration(dur)})",
+        description=description or f"Practiced in CodeLens {language or 'editor'} for {format_duration(dur)}.",
+        language=language,
+        topic=topic or "Practice",
+        status="completed",
+        started_at=started,
+        completed_at=now,
+        duration_seconds=dur,
+        metadata_json={"session_type": "heartbeat", "platform": "codelens_web"}
+    )
+    return create_activity(user_id=user_id, data=act_data, db=db)
+
 def get_user_activities(
     user_id: int,
     activity_type: Optional[str] = None,
@@ -91,7 +155,8 @@ def get_user_activities(
     mongo_db = get_mongodb()
     if mongo_db is None:
         return ActivityListResponse(items=[], total=0, page=page, limit=limit, pages=1)
-    query = {"user_id": user_id}
+    
+    query = dict(_user_query(user_id))
 
     # Activity type filter
     if activity_type and activity_type.lower() != "all":
@@ -99,7 +164,7 @@ def get_user_activities(
             "code_execution": ["code_execution", "execution"],
             "visualization": ["visualization_started", "visualization_completed", "visualization"],
             "ai_tutor": ["ai_tutor", "ai_explanation"],
-            "practice": ["practice", "practice_completed"],
+            "practice": ["practice", "practice_completed", "code_execution", "execution", "visualization_completed", "visualization"],
             "programs": ["program_saved", "program_opened", "new_program"],
         }
         types_to_match = type_mapping.get(activity_type.lower(), [activity_type.lower()])
@@ -168,7 +233,7 @@ def get_recent_activities(user_id: int, limit: int = 10, db: Session = None) -> 
     mongo_db = get_mongodb()
     if mongo_db is None:
         return []
-    cursor = mongo_db.activities.find({"user_id": user_id}).sort([("started_at", -1), ("_id", -1)]).limit(limit)
+    cursor = mongo_db.activities.find(_user_query(user_id)).sort([("started_at", -1), ("_id", -1)]).limit(limit)
     
     items = []
     for doc in cursor:
@@ -190,8 +255,14 @@ def get_recent_activities(user_id: int, limit: int = 10, db: Session = None) -> 
         ))
     return items
 
+<<<<<<< Updated upstream
 def get_streak_info(user_id: int, db: Session = None) -> StreakResponse:
     """Calculate user's current consecutive practice days and longest streak from MongoDB activities."""
+=======
+
+def get_streak_info(user_id: int, db: Session = None) -> StreakResponse:
+    """Calculate user's current consecutive practice days and longest streak from MongoDB activities, executions, programs, and dashboard visits."""
+>>>>>>> Stashed changes
     mongo_db = get_mongodb()
     if mongo_db is None:
         return StreakResponse(
@@ -215,6 +286,12 @@ def get_streak_info(user_id: int, db: Session = None) -> StreakResponse:
                     dates.append(datetime.fromisoformat(dt_str).date())
                 except ValueError:
                     pass
+
+    # 4. Dashboard & platform access events in MongoDB
+    for doc in mongo_db.dashboard_history.find(user_q, {"created_at": 1}):
+        d = parse_to_date(doc.get("created_at"))
+        if d:
+            dates_set.add(d)
 
     # Unique sorted dates (newest first)
     dates = sorted(list(set(dates)), reverse=True)
@@ -268,7 +345,7 @@ def get_streak_info(user_id: int, db: Session = None) -> StreakResponse:
     )
 
 def get_learning_time(user_id: int, db: Session = None) -> LearningTimeResponse:
-    """Calculate accumulated learning duration from MongoDB."""
+    """Calculate accumulated learning and practice duration from MongoDB."""
     mongo_db = get_mongodb()
     if mongo_db is None:
         return LearningTimeResponse(
@@ -280,17 +357,42 @@ def get_learning_time(user_id: int, db: Session = None) -> LearningTimeResponse:
     start_week = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
     start_month = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    def sum_duration(since_date):
-        pipeline = [
-            {"$match": {"user_id": user_id, "started_at": {"$gte": since_date}}},
-            {"$group": {"_id": None, "total": {"$sum": "$duration_seconds"}}}
-        ]
-        res = list(mongo_db.activities.aggregate(pipeline))
-        return float(res[0]["total"]) if res and res[0]["total"] is not None else 0.0
+    user_q = _user_query(user_id)
+
+    def sum_duration(since_date: datetime) -> float:
+        total = 0.0
+        # Sum from activities collection
+        query = {
+            "$and": [
+                user_q,
+                {"$or": [
+                    {"started_at": {"$gte": since_date}},
+                    {"created_at": {"$gte": since_date}}
+                ]}
+            ]
+        }
+        for doc in mongo_db.activities.find(query):
+            total += get_effective_duration(doc)
+        
+        # If no activities in range, also check executions
+        if total == 0.0:
+            exec_count = mongo_db.executions.count_documents({
+                "$and": [
+                    user_q,
+                    {"created_at": {"$gte": since_date}}
+                ]
+            })
+            total += float(exec_count * 60.0)
+
+        return total
 
     today_sum = sum_duration(start_today)
     week_sum = sum_duration(start_week)
     month_sum = sum_duration(start_month)
+
+    # Ensure cumulative consistency: month >= week >= today
+    week_sum = max(week_sum, today_sum)
+    month_sum = max(month_sum, week_sum)
 
     return LearningTimeResponse(
         today_seconds=today_sum,
@@ -319,37 +421,60 @@ def get_daily_activity(user_id: int, days: int = 7, db: Session = None) -> Daily
             ))
         return DailyActivityResponse(days=daily_items, total_week_activity=0)
 
+    user_q = _user_query(user_id)
+
     for i in range(days - 1, -1, -1):
         target_date = (now - timedelta(days=i)).date()
         start_of_day = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=timezone.utc)
         end_of_day = start_of_day + timedelta(days=1)
 
+        date_condition = {
+            "$or": [
+                {"started_at": {"$gte": start_of_day, "$lt": end_of_day}},
+                {"created_at": {"$gte": start_of_day, "$lt": end_of_day}}
+            ]
+        }
+
         execs = mongo_db.activities.count_documents({
-            "user_id": user_id,
-            "started_at": {"$gte": start_of_day, "$lt": end_of_day},
-            "activity_type": {"$in": ["code_execution", "execution"]}
+            "$and": [
+                user_q,
+                date_condition,
+                {"activity_type": {"$in": ["code_execution", "execution", "practice"]}}
+            ]
         })
+        # Also check standalone executions
+        direct_execs = mongo_db.executions.count_documents({
+            "$and": [
+                user_q,
+                {"created_at": {"$gte": start_of_day, "$lt": end_of_day}}
+            ]
+        })
+        total_day_execs = max(execs, direct_execs)
 
         vizs = mongo_db.activities.count_documents({
-            "user_id": user_id,
-            "started_at": {"$gte": start_of_day, "$lt": end_of_day},
-            "activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}
+            "$and": [
+                user_q,
+                date_condition,
+                {"activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}}
+            ]
         })
 
         ais = mongo_db.activities.count_documents({
-            "user_id": user_id,
-            "started_at": {"$gte": start_of_day, "$lt": end_of_day},
-            "activity_type": {"$in": ["ai_tutor", "ai_explanation"]}
+            "$and": [
+                user_q,
+                date_condition,
+                {"activity_type": {"$in": ["ai_tutor", "ai_explanation"]}}
+            ]
         })
 
-        day_total = execs + vizs + ais
+        day_total = total_day_execs + vizs + ais
         total_week += day_total
 
         daily_items.append(
             DayActivityItem(
                 date=target_date.isoformat(),
                 day=day_names[target_date.weekday()],
-                executions=execs,
+                executions=total_day_execs,
                 visualizations=vizs,
                 aiExplanations=ais,
                 total=day_total
@@ -371,21 +496,32 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
     start_this_week = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
     start_last_week = (now - timedelta(days=14)).replace(hour=0, minute=0, second=0, microsecond=0)
 
+<<<<<<< Updated upstream
     # Total programs saved in MongoDB
     hist_count = mongo_db.programs.count_documents({"user_id": user_id})
+=======
+    user_q = _user_query(user_id)
+
+    # ── 1. Programs Saved (programs collection) ───────────────────────────────
+    hist_count = mongo_db.programs.count_documents(user_q)
+>>>>>>> Stashed changes
 
     # Total executions in MongoDB
     exec_count = mongo_db.activities.count_documents({
-        "user_id": user_id,
-        "activity_type": {"$in": ["code_execution", "execution"]}
+        "$and": [user_q, {"activity_type": {"$in": ["code_execution", "execution"]}}]
     })
+<<<<<<< Updated upstream
+=======
+    exec_direct = mongo_db.executions.count_documents(user_q)
+    total_exec = max(exec_count, exec_direct)
+>>>>>>> Stashed changes
 
     # Total visualizations in MongoDB
     viz_count = mongo_db.activities.count_documents({
-        "user_id": user_id,
-        "activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}
+        "$and": [user_q, {"activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}}]
     })
 
+<<<<<<< Updated upstream
     # Sum learning hours in MongoDB
     pipeline = [
         {"$match": {"user_id": user_id}},
@@ -395,12 +531,34 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
     total_seconds = float(res[0]["total"]) if res and res[0]["total"] is not None else 0.0
     learning_hours = round(total_seconds / 3600.0, 1)
 
+=======
+    # ── 4. Programs Practiced ────────────────────────────────────────────────
+    practice_count = mongo_db.activities.count_documents({
+        "$and": [user_q, {"activity_type": {"$in": ["practice", "practice_completed", "code_execution", "execution"]}}]
+    })
+
+    # ── 5. Learning Hours (sum of effective duration_seconds across all activities) ────
+    total_seconds = 0.0
+    for doc in mongo_db.activities.find(user_q):
+        total_seconds += get_effective_duration(doc)
+    if total_seconds == 0.0 and total_exec > 0:
+        total_seconds = float(total_exec * 60.0)
+
+    learning_hours = round(total_seconds / 3600.0, 1)
+
+    # ── 6. Longest Streak & Day Streak ───────────────────────────────────────
+    streak_info = get_streak_info(user_id=user_id, db=db)
+    longest_streak = streak_info.longest_streak
+
+    # ── 7. Week-over-week trend helper ────────────────────────────────────────
+>>>>>>> Stashed changes
     def calc_trend(this_w: int, last_w: int) -> int:
         if last_w == 0:
             return 12 if this_w > 0 else 0
         return int(((this_w - last_w) / last_w) * 100)
 
     this_w_exec = mongo_db.activities.count_documents({
+<<<<<<< Updated upstream
         "user_id": user_id,
         "started_at": {"$gte": start_this_week},
         "activity_type": {"$in": ["code_execution", "execution"]}
@@ -409,9 +567,16 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
         "user_id": user_id,
         "started_at": {"$gte": start_last_week, "$lt": start_this_week},
         "activity_type": {"$in": ["code_execution", "execution"]}
+=======
+        "$and": [user_q, {"started_at": {"$gte": start_this_week}}, {"activity_type": {"$in": ["code_execution", "execution"]}}]
+    })
+    last_w_exec = mongo_db.activities.count_documents({
+        "$and": [user_q, {"started_at": {"$gte": start_last_week, "$lt": start_this_week}}, {"activity_type": {"$in": ["code_execution", "execution"]}}]
+>>>>>>> Stashed changes
     })
 
     this_w_viz = mongo_db.activities.count_documents({
+<<<<<<< Updated upstream
         "user_id": user_id,
         "started_at": {"$gte": start_this_week},
         "activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}
@@ -421,6 +586,25 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
         "started_at": {"$gte": start_last_week, "$lt": start_this_week},
         "activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}
     })
+=======
+        "$and": [user_q, {"started_at": {"$gte": start_this_week}}, {"activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}}]
+    })
+    last_w_viz = mongo_db.activities.count_documents({
+        "$and": [user_q, {"started_at": {"$gte": start_last_week, "$lt": start_this_week}}, {"activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}}]
+    })
+    this_w_prog = mongo_db.programs.count_documents({
+        "$and": [user_q, {"created_at": {"$gte": start_this_week}}]
+    })
+    last_w_prog = mongo_db.programs.count_documents({
+        "$and": [user_q, {"created_at": {"$gte": start_last_week, "$lt": start_this_week}}]
+    })
+    this_w_prac = mongo_db.activities.count_documents({
+        "$and": [user_q, {"started_at": {"$gte": start_this_week}}, {"activity_type": {"$in": ["practice", "practice_completed", "code_execution"]}}]
+    })
+    last_w_prac = mongo_db.activities.count_documents({
+        "$and": [user_q, {"started_at": {"$gte": start_last_week, "$lt": start_this_week}}, {"activity_type": {"$in": ["practice", "practice_completed", "code_execution"]}}]
+    })
+>>>>>>> Stashed changes
 
     return DashboardStatsResponse(
         totalPrograms=hist_count,
@@ -430,9 +614,13 @@ def get_dashboard_stats(user_id: int, db: Session = None) -> DashboardStatsRespo
         programsTrend=12 if hist_count > 0 else 0,
         executionsTrend=calc_trend(this_w_exec, last_w_exec),
         visualizationsTrend=calc_trend(this_w_viz, last_w_viz),
+<<<<<<< Updated upstream
         learningTrend=8 if learning_hours > 0 else 0
+=======
+        practiceTrend=calc_trend(this_w_prac, last_w_prac),
+        learningTrend=calc_trend(int(total_seconds), int(total_seconds * 0.8))
+>>>>>>> Stashed changes
     )
-
 
 def get_calendar_activity(user_id: int, days: int = 180, db: Session = None) -> CalendarActivityResponse:
     """Return per-day activity counts for the last N days (used for the heatmap calendar)."""
@@ -440,7 +628,6 @@ def get_calendar_activity(user_id: int, days: int = 180, db: Session = None) -> 
     now = datetime.now(timezone.utc)
 
     if mongo_db is None:
-        # Return empty calendar when MongoDB is unavailable
         empty_days = []
         for i in range(days, -1, -1):
             d = (now - timedelta(days=i)).date()
@@ -472,8 +659,28 @@ def get_calendar_activity(user_id: int, days: int = 180, db: Session = None) -> 
         {"$sort": {"_id": 1}}
     ]
 
+<<<<<<< Updated upstream
     results = list(mongo_db.activities.aggregate(pipeline))
     day_map: Dict[str, int] = {r["_id"]: r["count"] for r in results}
+=======
+    # 2. Also ensure any executions from mongo_db.executions are counted
+    for doc in mongo_db.executions.find(user_q, {"created_at": 1}):
+        d_str = extract_date(doc.get("created_at"))
+        if d_str:
+            day_map[d_str] = day_map.get(d_str, 0) + 1
+
+    # 3. Also include saved programs from mongo_db.programs
+    for doc in mongo_db.programs.find(user_q, {"created_at": 1, "updated_at": 1}):
+        d_str = extract_date(doc.get("created_at")) or extract_date(doc.get("updated_at"))
+        if d_str:
+            day_map[d_str] = day_map.get(d_str, 0) + 1
+
+    # 4. Also include dashboard visits and platform accesses from mongo_db.dashboard_history
+    for doc in mongo_db.dashboard_history.find(user_q, {"created_at": 1}):
+        d_str = extract_date(doc.get("created_at"))
+        if d_str:
+            day_map[d_str] = day_map.get(d_str, 0) + 1
+>>>>>>> Stashed changes
 
     calendar_days: List[CalendarDayItem] = []
     max_count = 0

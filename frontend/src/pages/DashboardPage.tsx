@@ -675,7 +675,7 @@ function LearningTimeCard({ learningTime }: { learningTime: DashboardData['learn
         ].map(({ period, val }) => (
           <div key={period} className="learning-time-item">
             <div className="learning-time-period">{period}</div>
-            <div className="learning-time-val">{val === '0m' ? '—' : val}</div>
+            <div className="learning-time-val">{val && val !== '0m' ? val : '0m'}</div>
           </div>
         ))}
       </div>

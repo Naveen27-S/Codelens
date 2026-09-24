@@ -1104,3 +1104,797 @@
   .dash-header h1 { font-size: 20px; }
   .activity-week-stats { grid-template-columns: repeat(2, 1fr); }
 }
+<<<<<<< Updated upstream
+=======
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LIGHT THEME: DashboardPage Overrides
+   ═══════════════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .dashboard-page,
+.light .dashboard-page {
+  background: #f8fafc;
+  color: #334155;
+}
+
+[data-theme="light"] .dash-card,
+[data-theme="light"] .stat-card,
+[data-theme="light"] .recent-program-card,
+[data-theme="light"] .dash-chart-card,
+.light .dash-card,
+.light .stat-card,
+.light .recent-program-card,
+.light .dash-chart-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .dash-card-title,
+.light .dash-card-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .dash-header h1,
+[data-theme="light"] .stat-card-value,
+[data-theme="light"] .dash-chart-title,
+[data-theme="light"] .recent-program-name,
+.light .dash-header h1,
+.light .stat-card-value,
+.light .dash-chart-title,
+.light .recent-program-name {
+  color: #0f172a;
+}
+
+[data-theme="light"] .stat-card-label,
+.light .stat-card-label {
+  color: #64748b;
+}
+
+[data-theme="light"] .stat-card-sub,
+.light .stat-card-sub {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .dash-btn-secondary,
+.light .dash-btn-secondary {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .dash-btn-secondary:hover,
+.light .dash-btn-secondary:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="light"] .dash-table-header,
+.light .dash-table-header {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+[data-theme="light"] .dash-table-row,
+.light .dash-table-row {
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .dash-table-row:hover,
+.light .dash-table-row:hover {
+  background: #f8fafc;
+}
+
+/* ─── Weekly Activity Chart (Light Mode) ─── */
+[data-theme="light"] .activity-bar-track,
+.light .activity-bar-track {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .activity-bar-fill,
+.light .activity-bar-fill {
+  background: linear-gradient(180deg, #6366f1, #4f46e5);
+}
+
+[data-theme="light"] .activity-bar-fill.today,
+.light .activity-bar-fill.today {
+  background: linear-gradient(180deg, #818cf8, #6366f1);
+}
+
+[data-theme="light"] .activity-bar-day,
+.light .activity-bar-day {
+  color: #64748b;
+}
+
+[data-theme="light"] .activity-bar-count,
+.light .activity-bar-count {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+[data-theme="light"] .activity-week-stats,
+.light .activity-week-stats {
+  border-top-color: #e2e8f0;
+}
+
+[data-theme="light"] .activity-week-stat-val,
+.light .activity-week-stat-val {
+  color: #0f172a;
+}
+
+[data-theme="light"] .activity-week-stat-label,
+.light .activity-week-stat-label {
+  color: #64748b;
+}
+
+/* ─── Continue Coding Card (Light Mode) ─── */
+[data-theme="light"] .continue-item,
+.light .continue-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .continue-item:hover,
+.light .continue-item:hover {
+  background: #f8fafc;
+  border-color: #c7d2fe;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+}
+
+[data-theme="light"] .continue-title,
+.light .continue-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .continue-meta,
+.light .continue-meta {
+  color: #64748b;
+}
+
+[data-theme="light"] .continue-btn,
+.light .continue-btn {
+  background: #eef2ff;
+  color: #4f46e5;
+  border-color: #c7d2fe;
+}
+
+[data-theme="light"] .continue-btn:hover,
+.light .continue-btn:hover {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-color: #a5b4fc;
+}
+
+[data-theme="light"] .lang-python,
+.light .lang-python {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+[data-theme="light"] .lang-java,
+.light .lang-java {
+  background: #fffbeb;
+  color: #d97706;
+  border-color: #fde68a;
+}
+
+[data-theme="light"] .lang-cpp,
+[data-theme="light"] .lang-c,
+.light .lang-cpp,
+.light .lang-c {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border-color: #ddd6fe;
+}
+
+[data-theme="light"] .lang-javascript,
+.light .lang-javascript {
+  background: #fefce8;
+  color: #ca8a04;
+  border-color: #fef08a;
+}
+
+/* ─── Learning Progress Card (Light Mode) ─── */
+[data-theme="light"] .learning-progress-label,
+.light .learning-progress-label {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+[data-theme="light"] .learning-progress-pct,
+.light .learning-progress-pct {
+  color: #4f46e5;
+  font-weight: 700;
+}
+
+[data-theme="light"] .learning-progress-bar-wrap,
+.light .learning-progress-bar-wrap {
+  background: #e2e8f0;
+}
+
+/* ─── Practice Time / Learning Time Card (Light Mode) ─── */
+[data-theme="light"] .learning-time-item,
+.light .learning-time-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .learning-time-period,
+.light .learning-time-period {
+  color: #64748b;
+  font-weight: 600;
+}
+
+[data-theme="light"] .learning-time-val,
+.light .learning-time-val {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+/* ─── Recommendations Card (Light Mode) ─── */
+[data-theme="light"] .recommendation-card,
+.light .recommendation-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .recommendation-card:hover,
+.light .recommendation-card:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .rec-topic,
+.light .rec-topic {
+  color: #0f172a;
+}
+
+[data-theme="light"] .rec-problems,
+.light .rec-problems {
+  color: #64748b;
+}
+
+[data-theme="light"] .rec-solve-btn,
+.light .rec-solve-btn {
+  background: #eef2ff;
+  color: #4f46e5;
+  border-color: #c7d2fe;
+}
+
+[data-theme="light"] .rec-solve-btn:hover,
+.light .rec-solve-btn:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+/* ─── AI Insight Card (Light Mode) ─── */
+[data-theme="light"] .ai-insight-text,
+.light .ai-insight-text {
+  color: #334155;
+}
+
+[data-theme="light"] .ai-insight-badge,
+.light .ai-insight-badge {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4f46e5;
+}
+
+/* ─── Visualizations List (Light Mode) ─── */
+[data-theme="light"] .viz-item,
+.light .viz-item {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .viz-title,
+.light .viz-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .viz-meta,
+.light .viz-meta {
+  color: #64748b;
+}
+
+[data-theme="light"] .viz-step-count,
+.light .viz-step-count {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+[data-theme="light"] .viz-btn,
+.light .viz-btn {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .viz-btn:hover,
+.light .viz-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* ─── Saved Programs History Card (Light Mode) ─── */
+[data-theme="light"] .prog-search-input,
+.light .prog-search-input {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="light"] .prog-search-input::placeholder,
+.light .prog-search-input::placeholder {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .prog-filter-tab,
+.light .prog-filter-tab {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .prog-filter-tab:hover,
+.light .prog-filter-tab:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="light"] .prog-filter-tab.active,
+.light .prog-filter-tab.active {
+  background: #eef2ff;
+  color: #4f46e5;
+  border-color: #c7d2fe;
+}
+
+[data-theme="light"] .prog-history-item,
+.light .prog-history-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .prog-history-item:hover,
+.light .prog-history-item:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .prog-history-title,
+.light .prog-history-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .prog-history-meta,
+.light .prog-history-meta {
+  color: #64748b;
+}
+
+[data-theme="light"] .prog-code-preview,
+.light .prog-code-preview {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .prog-action-btn,
+.light .prog-action-btn {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+[data-theme="light"] .prog-action-btn:hover,
+.light .prog-action-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* ─── Quick Starter Templates (Light Mode) ─── */
+[data-theme="light"] .starter-card,
+.light .starter-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .starter-card:hover,
+.light .starter-card:hover {
+  background: #f8fafc;
+  border-color: #c7d2fe;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.08);
+}
+
+[data-theme="light"] .starter-card-title,
+.light .starter-card-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .starter-card-desc,
+.light .starter-card-desc {
+  color: #64748b;
+}
+
+[data-theme="light"] .starter-code-preview,
+.light .starter-code-preview {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+/* ─── Calendar & Tooltips (Light Mode) ─── */
+[data-theme="light"] .cal-nav-btn,
+.light .cal-nav-btn {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .cal-nav-btn:hover,
+.light .cal-nav-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="light"] .cal-weekday-label,
+.light .cal-weekday-label {
+  color: #64748b;
+}
+
+[data-theme="light"] .cal-cell,
+.light .cal-cell {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .cal-cell:hover,
+.light .cal-cell:hover {
+  border-color: #94a3b8;
+}
+
+[data-theme="light"] .cal-day-inspector,
+.light .cal-day-inspector {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .cal-inspector-date,
+.light .cal-inspector-date {
+  color: #0f172a;
+}
+
+[data-theme="light"] .cal-inspector-summary,
+.light .cal-inspector-summary {
+  color: #334155;
+}
+
+[data-theme="light"] .calendar-tooltip,
+.light .calendar-tooltip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .calendar-tooltip-date,
+.light .calendar-tooltip-date {
+  color: #0f172a;
+}
+
+[data-theme="light"] .dash-empty-state,
+.light .dash-empty-state {
+  color: #64748b;
+}
+
+[data-theme="light"] .dash-empty-text,
+.light .dash-empty-text {
+  color: #0f172a;
+}
+
+[data-theme="light"] .dash-empty-sub,
+.light .dash-empty-sub {
+  color: #64748b;
+}
+
+[data-theme="light"] .small-cal-widget,
+[data-theme="light"] .small-cal-stat-card,
+[data-theme="light"] .small-cal-milestone,
+[data-theme="light"] .small-cal-day-detail,
+.light .small-cal-widget,
+.light .small-cal-stat-card,
+.light .small-cal-milestone,
+.light .small-cal-day-detail {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .small-cal-cell,
+.light .small-cal-cell {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .small-cal-cell:hover,
+.light .small-cal-cell:hover {
+  background: #e2e8f0;
+}
+
+[data-theme="light"] .small-cal-day-num,
+[data-theme="light"] .small-cal-month-title,
+[data-theme="light"] .small-stat-val,
+[data-theme="light"] .small-milestone-head,
+[data-theme="light"] .small-day-detail-date,
+.light .small-cal-day-num,
+.light .small-cal-month-title,
+.light .small-stat-val,
+.light .small-milestone-head,
+.light .small-day-detail-date {
+  color: #0f172a;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LIGHT THEME: Contribution Heatmap & Saved Programs (sp-*)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Mode Switcher / View Tabs in Light Mode ─── */
+[data-theme="light"] .activity-view-tabs,
+.light .activity-view-tabs {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .activity-tab-btn,
+.light .activity-tab-btn {
+  color: #64748b;
+}
+
+[data-theme="light"] .activity-tab-btn:hover:not(.active),
+.light .activity-tab-btn:hover:not(.active) {
+  color: #0f172a;
+  background: #e2e8f0;
+}
+
+[data-theme="light"] .activity-tab-btn.active,
+.light .activity-tab-btn.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+}
+
+/* ─── Heatmap Container in Light Mode ─── */
+[data-theme="light"] .cal-heatmap-view,
+.light .cal-heatmap-view {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] .calendar-month-label,
+.light .calendar-month-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+[data-theme="light"] .calendar-day-label,
+.light .calendar-day-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* Heatmap Cells in Light Mode: clean soft gray for empty, vibrant indigo/purple for activity */
+[data-theme="light"] .calendar-cell,
+.light .calendar-cell {
+  background: #e2e8f0;
+  border: 1px solid rgba(203, 213, 225, 0.6);
+}
+
+[data-theme="light"] .calendar-cell:hover,
+.light .calendar-cell:hover {
+  border-color: #6366f1;
+}
+
+[data-theme="light"] .cal-level-0,
+.light .cal-level-0 {
+  background: #e2e8f0;
+  border: 1px solid rgba(203, 213, 225, 0.6);
+}
+
+[data-theme="light"] .cal-level-1,
+.light .cal-level-1 {
+  background: #c7d2fe;
+  border: 1px solid #a5b4fc;
+}
+
+[data-theme="light"] .cal-level-2,
+.light .cal-level-2 {
+  background: #818cf8;
+  border: 1px solid #6366f1;
+}
+
+[data-theme="light"] .cal-level-3,
+.light .cal-level-3 {
+  background: #6366f1;
+  border: 1px solid #4f46e5;
+}
+
+[data-theme="light"] .cal-level-4,
+.light .cal-level-4 {
+  background: #4f46e5;
+  border: 1px solid #4338ca;
+}
+
+[data-theme="light"] .calendar-legend-label,
+.light .calendar-legend-label {
+  color: #64748b;
+}
+
+[data-theme="light"] .calendar-legend-cell,
+.light .calendar-legend-cell {
+  border-radius: 2px;
+}
+
+[data-theme="light"] .cal-day-inspector,
+.light .cal-day-inspector {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+/* ─── Saved Programs Card (`.sp-*`) in Light Mode ─── */
+[data-theme="light"] .sp-total-badge,
+.light .sp-total-badge {
+  background: #eef2ff;
+  color: #4f46e5;
+  border: 1px solid #c7d2fe;
+}
+
+[data-theme="light"] .sp-search-form,
+.light .sp-search-form {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .sp-search-form:focus-within,
+.light .sp-search-form:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+[data-theme="light"] .sp-search-icon,
+.light .sp-search-icon {
+  color: #64748b;
+}
+
+[data-theme="light"] .sp-search-input,
+.light .sp-search-input {
+  color: #0f172a;
+}
+
+[data-theme="light"] .sp-search-input::placeholder,
+.light .sp-search-input::placeholder {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .sp-lang-pill,
+.light .sp-lang-pill {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+}
+
+[data-theme="light"] .sp-lang-pill:hover,
+.light .sp-lang-pill:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .sp-lang-pill.active,
+.light .sp-lang-pill.active {
+  background: #eef2ff;
+  color: #4f46e5;
+  border-color: #c7d2fe;
+}
+
+/* Saved Program Items / Rows */
+[data-theme="light"] .sp-item,
+.light .sp-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .sp-item:hover,
+.light .sp-item:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .sp-item.expanded,
+.light .sp-item.expanded {
+  border-color: #c7d2fe;
+}
+
+[data-theme="light"] .sp-item-name,
+.light .sp-item-name {
+  color: #0f172a;
+}
+
+[data-theme="light"] .sp-item-meta,
+.light .sp-item-meta {
+  color: #64748b;
+}
+
+[data-theme="light"] .sp-desc-snippet,
+.light .sp-desc-snippet {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .sp-details-btn,
+.light .sp-details-btn {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+[data-theme="light"] .sp-details-btn:hover,
+.light .sp-details-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .sp-open-btn,
+.light .sp-open-btn {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #4f46e5;
+}
+
+[data-theme="light"] .sp-open-btn:hover,
+.light .sp-open-btn:hover {
+  background: #e0e7ff;
+  color: #4338ca;
+  border-color: #a5b4fc;
+}
+
+[data-theme="light"] .sp-code-preview,
+.light .sp-code-preview {
+  background: #f8fafc;
+  border-top-color: #e2e8f0;
+}
+
+[data-theme="light"] .sp-code-block,
+.light .sp-code-block {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .sp-code-footer,
+.light .sp-code-footer {
+  color: #64748b;
+}
+
+[data-theme="light"] .sp-page-btn,
+.light .sp-page-btn {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .sp-page-btn:hover:not(:disabled),
+.light .sp-page-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+
+>>>>>>> Stashed changes

@@ -19,7 +19,7 @@ def test_connection():
         
         # Delete the document
         delete_result = db.test_collection.delete_one({"name": "connection_test"})
-        print(f"Deleted count: {delete_result.deleted_count}")
+        print(f"Deleted count: {delete_result.deleted_count}") 
         
         print("MongoDB test finished successfully!")
         

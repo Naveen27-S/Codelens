@@ -128,3 +128,55 @@ class CalendarDayItem(BaseModel):
 class CalendarActivityResponse(BaseModel):
     days: List[CalendarDayItem]
     max_count: int  # used for intensity normalization in the UI
+<<<<<<< Updated upstream
+=======
+
+
+# ── Dashboard History Schemas ──────────────────────────────────────────────────
+
+class DashboardHistoryEventCreate(BaseModel):
+    """Payload sent by the frontend to record a dashboard history event."""
+    event_type: str             # dashboard_open | program_open | visualization_open | history_search | activity_filter | stat_view
+    title: str
+    description: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class DashboardHistoryEventResponse(BaseModel):
+    """A single dashboard history event returned by the API."""
+    id: str                     # stringified MongoDB ObjectId
+    user_id: int
+    event_type: str
+    title: str
+    description: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None   # ISO string
+
+
+class DashboardHistoryListResponse(BaseModel):
+    """Paginated list of dashboard history events."""
+    items: List[DashboardHistoryEventResponse]
+    total: int
+    page: int
+    limit: int
+    pages: int
+
+
+class DashboardHistoryStatsResponse(BaseModel):
+    """Aggregate statistics for a user's dashboard history."""
+    total: int
+    today: int
+    this_week: int
+    this_month: int
+    by_event_type: Dict[str, int]
+
+
+class SessionTimeRequest(BaseModel):
+    duration_seconds: float
+    language: Optional[str] = None
+    topic: Optional[str] = None
+    activity_type: Optional[str] = "practice"
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+>>>>>>> Stashed changes
