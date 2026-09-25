@@ -30,6 +30,9 @@ class UserResponse(BaseModel):
     email: str
     username: Optional[str] = None
     created_at: datetime
+    last_login: Optional[datetime] = None
+    last_accessed_at: Optional[datetime] = None
+    login_count: Optional[int] = 0
 
     class Config:
         from_attributes = True

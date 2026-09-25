@@ -25,6 +25,9 @@ class MongoUser:
         self.is_active: bool = doc.get("is_active", True)
         self.created_at: datetime = doc.get("created_at") or datetime.now(timezone.utc)
         self.updated_at: datetime = doc.get("updated_at") or datetime.now(timezone.utc)
+        self.last_login: Optional[datetime] = doc.get("last_login")
+        self.last_accessed_at: Optional[datetime] = doc.get("last_accessed_at")
+        self.login_count: int = doc.get("login_count", 0)
 
     def __getitem__(self, item: str) -> Any:
         return getattr(self, item)

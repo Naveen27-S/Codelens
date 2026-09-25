@@ -180,3 +180,13 @@ class SessionTimeRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
 
+
+class UserAccessDetailsResponse(BaseModel):
+    user_id: Union[int, str]
+    email: str
+    full_name: str
+    last_login: Optional[str] = None
+    last_accessed_at: Optional[str] = None
+    login_count: int = 0
+    recent_accesses: List[DashboardHistoryEventResponse] = []
+

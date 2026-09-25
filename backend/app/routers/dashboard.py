@@ -6,6 +6,7 @@ from ..core.database import get_db
 from ..services.auth_service import get_current_user
 from ..models.user import User
 from ..models.code_history import CodeHistory
+from datetime import datetime
 from ..schemas.dashboard import (
     ActivityCreate,
     ActivityResponse,
@@ -24,6 +25,7 @@ from ..schemas.dashboard import (
     DashboardHistoryListResponse,
     DashboardHistoryStatsResponse,
     SessionTimeRequest,
+    UserAccessDetailsResponse,
 )
 from ..schemas.program import ProgramCreate, ProgramUpdate, ProgramResponse
 from ..services import activity_service
@@ -500,3 +502,67 @@ def clear_all_dashboard_history(
     """Delete ALL dashboard history events for the authenticated user."""
     count = dashboard_history_service.clear_dashboard_history(user_id=current_user.id)
     return {"message": f"Cleared {count} dashboard history record(s).", "deleted_count": count}
+
+
+@router.get("/access-history", response_model=UserAccessDetailsResponse)
+def get_user_access_details(
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retrieve tracked user access details:
+    - Last login timestamp
+    - Last accessed timestamp
+    - Total login count
+    - Chronological log of recent user access events (logins, dashboard opens, program opens)
+    """
+    from ..database.mongodb import get_mongodb
+    mongo_db = get_mongodb()
+
+    last_login_str = None
+    last_accessed_str = None
+    login_count = getattr(current_user, "login_count", 0) or 0
+
+    if mongo_db is not None:
+        user_doc = mongo_db.users.find_one({"$or": [{"id": current_user.id}, {"id": str(current_user.id)}, {"email": current_user.email}]})
+        if user_doc:
+            ll = user_doc.get("last_login")
+            if isinstance(ll, datetime):
+                last_login_str = ll.isoformat()
+            elif isinstance(ll, str):
+                last_login_str = ll
+
+            la = user_doc.get("last_accessed_at")
+            if isinstance(la, datetime):
+                last_accessed_str = la.isoformat()
+            elif isinstance(la, str):
+                last_accessed_str = la
+
+            login_count = user_doc.get("login_count", login_count)
+
+    recent_events = dashboard_history_service.get_recent_dashboard_history(
+        user_id=current_user.id, limit=limit
+    )
+
+    access_items = [
+        DashboardHistoryEventResponse(
+            id=d["id"],
+            user_id=current_user.id,
+            event_type=d["event_type"],
+            title=d["title"],
+            description=d.get("description"),
+            metadata=d.get("metadata"),
+            created_at=d.get("created_at"),
+        )
+        for d in recent_events
+    ]
+
+    return UserAccessDetailsResponse(
+        user_id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        last_login=last_login_str,
+        last_accessed_at=last_accessed_str,
+        login_count=login_count,
+        recent_accesses=access_items,
+    )

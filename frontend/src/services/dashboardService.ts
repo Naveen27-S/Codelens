@@ -510,7 +510,10 @@ export async function fetchRecentActivities(limit: number = 10): Promise<UserAct
       `${API_URL}/dashboard/activity/recent?limit=${limit}`,
       { headers: authHeaders() }
     );
-    if (res.data && res.data.length > 0) return res.data;
+    if (Array.isArray(res.data)) {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (token || res.data.length > 0) return res.data;
+    }
     return DEFAULT_RECENT_ACTIVITIES;
   } catch {
     return DEFAULT_RECENT_ACTIVITIES;
@@ -614,7 +617,10 @@ export async function fetchRecentPrograms(): Promise<RecentProgram[]> {
       `${API_URL}/dashboard/recent-programs`,
       { headers: authHeaders() }
     );
-    if (res.data && res.data.length > 0) return res.data;
+    if (Array.isArray(res.data)) {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (token || res.data.length > 0) return res.data;
+    }
     return DEFAULT_PROGRAMS;
   } catch {
     return DEFAULT_PROGRAMS;
@@ -630,7 +636,10 @@ export async function fetchRecentVisualizations(): Promise<RecentVisualization[]
       `${API_URL}/dashboard/visualizations`,
       { headers: authHeaders() }
     );
-    if (res.data && res.data.length > 0) return res.data;
+    if (Array.isArray(res.data)) {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (token || res.data.length > 0) return res.data;
+    }
     return DEFAULT_VISUALIZATIONS;
   } catch {
     return DEFAULT_VISUALIZATIONS;
@@ -862,4 +871,37 @@ export async function fetchAllDashboardData(): Promise<DashboardData> {
     recentActivities,
     learningTime,
   };
+}
+
+export interface UserAccessDetails {
+  user_id: number | string;
+  email: string;
+  full_name: string;
+  last_login?: string | null;
+  last_accessed_at?: string | null;
+  login_count: number;
+  recent_accesses: Array<{
+    id: string;
+    event_type: string;
+    title: string;
+    description?: string;
+    created_at?: string;
+    metadata?: Record<string, any>;
+  }>;
+}
+
+/**
+ * Fetch user accessing details and session history tracked in MongoDB.
+ */
+export async function fetchUserAccessDetails(): Promise<UserAccessDetails | null> {
+  try {
+    const res = await axios.get<UserAccessDetails>(
+      `${API_URL}/dashboard/access-history`,
+      { headers: authHeaders() }
+    );
+    return res.data;
+  } catch (err) {
+    console.warn('Could not fetch user access details:', err);
+    return null;
+  }
 }

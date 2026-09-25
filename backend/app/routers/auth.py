@@ -37,6 +37,42 @@ def login(user_data: UserLogin):
             detail="Invalid email or password.",
         )
 
+    # Track user accessing details in MongoDB Atlas
+    mongo_db = get_mongodb()
+    now = datetime.now(timezone.utc)
+    if mongo_db is not None:
+        try:
+            mongo_db.users.update_one(
+                {"$or": [{"id": user.id}, {"id": str(user.id)}, {"email": user.email}]},
+                {
+                    "$set": {"last_login": now, "last_accessed_at": now},
+                    "$inc": {"login_count": 1},
+                },
+            )
+            # Record login event in dashboard_history
+            from ..services.dashboard_history_service import record_dashboard_event
+            record_dashboard_event(
+                user_id=user.id,
+                event_type="login",
+                title="User Logged In",
+                description=f"User {user.email} successfully logged into CodeLens AI.",
+                metadata={"email": user.email, "user_id": user.id},
+            )
+            # Record activity entry in activities collection
+            from ..services.activity_service import create_activity
+            from ..schemas.dashboard import ActivityCreate
+            create_activity(
+                user_id=user.id,
+                data=ActivityCreate(
+                    activity_type="login",
+                    title="User Logged In",
+                    description="User authenticated into CodeLens platform.",
+                    status="completed",
+                ),
+            )
+        except Exception:
+            pass
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email},
@@ -47,7 +83,18 @@ def login(user_data: UserLogin):
 
 @router.get("/me", response_model=UserResponse)
 def read_users_me(current_user: MongoUser = Depends(get_current_user)):
-    """Return the currently authenticated user's profile from MongoDB Atlas. Never returns password_hash."""
+    """Return the currently authenticated user's profile from MongoDB Atlas. Updates last_accessed_at."""
+    mongo_db = get_mongodb()
+    if mongo_db is not None:
+        try:
+            now = datetime.now(timezone.utc)
+            mongo_db.users.update_one(
+                {"$or": [{"id": current_user.id}, {"id": str(current_user.id)}, {"email": current_user.email}]},
+                {"$set": {"last_accessed_at": now}},
+            )
+            current_user.last_accessed_at = now
+        except Exception:
+            pass
     return current_user
 
 

@@ -18,7 +18,7 @@ import {
   TrendingUp, Clock, Play, ChevronRight, ChevronLeft, Zap,
   ArrowUpRight, RefreshCw, Calendar, BarChart3, Trophy, CheckCircle2,
   Search, Filter, FileCode, X, Plus, Copy, Check, Trash2,
-  Bug, Terminal, Sparkles, Loader2
+  Bug, Terminal, Sparkles, Loader2, ShieldCheck, History
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -29,12 +29,14 @@ import {
   runDashboardProgram,
   deleteSavedProgram,
   recordUserActivity,
+  fetchUserAccessDetails,
   type DashboardData,
   type DayActivity,
   type RecentProgram,
   type LanguageProgress,
   type SavedProgram,
   type StreakData,
+  type UserAccessDetails,
 } from '../services/dashboardService';
 import { recordDashboardEvent } from '../services/dashboardHistoryService';
 import axios from 'axios';
@@ -1674,6 +1676,117 @@ function LearningTimeCard({ learningTime }: { learningTime: DashboardData['learn
   );
 }
 
+// ─── User Access & Session Details Card ───────────────────────────────────────
+
+function UserAccessDetailsCard() {
+  const [accessData, setAccessData] = useState<UserAccessDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadAccessData = useCallback(async () => {
+    try {
+      const res = await fetchUserAccessDetails();
+      setAccessData(res);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAccessData();
+  }, [loadAccessData]);
+
+  if (loading) {
+    return (
+      <div className="dash-card">
+        <div className="dash-card-title"><ShieldCheck size={14} />User Access & Session Details</div>
+        <div className="dash-loading-spinner" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: '13px', padding: '12px 0' }}>
+          <Loader2 size={16} className="animate-spin" /> Loading user access logs from MongoDB Atlas...
+        </div>
+      </div>
+    );
+  }
+
+  if (!accessData) return null;
+
+  return (
+    <div className="dash-card access-details-card" id="user-access-details-section">
+      <div className="dash-card-title" style={{ justifyContent: 'space-between' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ShieldCheck size={14} />
+          User Access & Session Tracking
+        </span>
+        <span className="access-live-badge">
+          <span className="access-live-dot" /> Live MongoDB Atlas
+        </span>
+      </div>
+
+      {/* Overview Stat Row */}
+      <div className="access-summary-grid">
+        <div className="access-stat-box">
+          <div className="access-stat-label">Last Login</div>
+          <div className="access-stat-value">
+            {accessData.last_login ? relativeTime(accessData.last_login) : 'Current Session'}
+          </div>
+          <div className="access-stat-sub">
+            {accessData.last_login ? new Date(accessData.last_login).toLocaleString() : 'Active now'}
+          </div>
+        </div>
+
+        <div className="access-stat-box">
+          <div className="access-stat-label">Last Platform Access</div>
+          <div className="access-stat-value">
+            {accessData.last_accessed_at ? relativeTime(accessData.last_accessed_at) : 'Active Now'}
+          </div>
+          <div className="access-stat-sub">
+            {accessData.last_accessed_at ? new Date(accessData.last_accessed_at).toLocaleTimeString() : 'Current page view'}
+          </div>
+        </div>
+
+        <div className="access-stat-box">
+          <div className="access-stat-label">Total Logins Tracked</div>
+          <div className="access-stat-value">
+            {accessData.login_count || 1}
+          </div>
+          <div className="access-stat-sub">Verified sessions</div>
+        </div>
+
+        <div className="access-stat-box">
+          <div className="access-stat-label">Account User ID</div>
+          <div className="access-stat-value">
+            #{accessData.user_id}
+          </div>
+          <div className="access-stat-sub">{accessData.email}</div>
+        </div>
+      </div>
+
+      {/* Recent Access History Log */}
+      {accessData.recent_accesses && accessData.recent_accesses.length > 0 && (
+        <div className="access-events-container">
+          <div className="access-events-title">
+            <History size={13} /> Recent Access Log ({accessData.recent_accesses.length} events recorded)
+          </div>
+          <div className="access-events-list">
+            {accessData.recent_accesses.slice(0, 6).map((evt) => (
+              <div key={evt.id} className="access-event-item">
+                <div className={`access-event-tag tag-${evt.event_type}`}>
+                  {evt.event_type === 'login' ? 'LOGIN' : evt.event_type === 'dashboard_open' ? 'DASHBOARD' : evt.event_type.replace('_', ' ')}
+                </div>
+                <div className="access-event-info">
+                  <div className="access-event-name">{evt.title}</div>
+                  {evt.description && <div className="access-event-desc">{evt.description}</div>}
+                </div>
+                <div className="access-event-time">
+                  {evt.created_at ? relativeTime(evt.created_at) : 'recently'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard Page ──────────────────────────────────────────────────────
 
 export function DashboardPage() {
@@ -1863,6 +1976,9 @@ export function DashboardPage() {
           onOpenInEditor={handleOpenSavedProgram}
           onProgramSaved={() => loadData(false)}
         />
+
+        {/* ── User Access & Session Details (full-width) ──────────────────── */}
+        <UserAccessDetailsCard />
 
       </div>
     </div>
