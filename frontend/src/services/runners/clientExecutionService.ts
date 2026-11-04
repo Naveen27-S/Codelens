@@ -7,7 +7,7 @@
  */
 
 import type { ExecutionResult } from '../../types/execution';
-import { runPythonClient } from './pythonRunner';
+import { runPythonClient, getPyodide } from './pythonRunner';
 import { runJSClient } from './jsRunner';
 import { runJavaClient } from './javaRunner';
 import { runCppClient } from './cppRunner';
@@ -21,6 +21,20 @@ export async function executeCodeClient(
   inputData: string = ''
 ): Promise<ExecutionResult> {
   const normLang = language.toLowerCase().trim();
+
+  // If Python, ensure Pyodide CDN runtime has loaded before starting the 5s loop timeout
+  if (normLang === 'python') {
+    try {
+      if (typeof window !== 'undefined' && !window.pyodideInstance) {
+        await Promise.race([
+          getPyodide(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Pyodide CDN load timeout')), 25000))
+        ]);
+      }
+    } catch {
+      // Continue to execution which will handle errors gracefully
+    }
+  }
 
   // Create timeout Promise to kill hanging execution after 5 seconds
   const timeoutPromise = new Promise<ExecutionResult>((_, reject) => {

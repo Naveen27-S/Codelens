@@ -589,6 +589,57 @@ function AITutorSection() {
   const [isTestingVoiceSpeed, setIsTestingVoiceSpeed] = useState<boolean>(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Gemini AI Key Connection state in Settings
+  const [geminiKeyInput, setGeminiKeyInput] = useState(() => {
+    try { return localStorage.getItem('codelens_gemini_api_key') || ''; } catch { return ''; }
+  });
+  const [geminiStatus, setGeminiStatus] = useState<{ connected: boolean; model?: string; message?: string } | null>(null);
+  const [isVerifyingGemini, setIsVerifyingGemini] = useState(false);
+
+  useEffect(() => {
+    const key = localStorage.getItem('codelens_gemini_api_key');
+    axios.get(`${API_URL}/ai/verify-gemini`, {
+      headers: key ? { 'x-gemini-api-key': key } : {}
+    }).then((res) => {
+      setGeminiStatus({
+        connected: res.data.connected || res.data.status === 'connected',
+        model: res.data.model || 'Gemini AI',
+        message: res.data.message || 'Connected'
+      });
+    }).catch(() => {
+      setGeminiStatus({ connected: false, message: 'Could not connect to Gemini service' });
+    });
+  }, []);
+
+  const handleSaveGeminiKey = async () => {
+    setIsVerifyingGemini(true);
+    try {
+      const clean = geminiKeyInput.trim();
+      const headers = clean ? { 'x-gemini-api-key': clean } : {};
+      const res = await axios.post(`${API_URL}/ai/verify-gemini`, {}, { headers });
+      if (res.data && (res.data.connected || res.data.status === 'connected')) {
+        if (clean) {
+          localStorage.setItem('codelens_gemini_api_key', clean);
+        } else {
+          localStorage.removeItem('codelens_gemini_api_key');
+        }
+        setGeminiStatus({
+          connected: true,
+          model: res.data.model || 'Gemini AI',
+          message: 'Gemini Key active and connected!'
+        });
+
+      } else {
+        setGeminiStatus({ connected: false, message: res.data?.message || 'Connection failed' });
+      }
+    } catch (e: any) {
+      setGeminiStatus({ connected: false, message: e.response?.data?.detail || e.message || 'Verification failed.' });
+    } finally {
+      setIsVerifyingGemini(false);
+    }
+  };
+
+
   const save = useCallback(<K extends keyof AppSettings>(key: K, val: AppSettings[K]) => {
     updateSetting(key, val);
     setSavedKey(key as string);
@@ -810,6 +861,84 @@ function AITutorSection() {
           </div>
         </div>
       </SectionCard>
+
+      {/* ─── Google Gemini AI Key Connection SectionCard ─────────────────────── */}
+      <SectionCard
+        title="Google Gemini AI Engine & API Key"
+        description="Connect your Gemini API Key to power deep code mistake diagnosis, automatic compiler error fixing, and interactive flowchart generation."
+      >
+        <div className="space-y-4">
+          {/* Connection Status Badge */}
+          <div className={`p-4 rounded-xl border flex items-center justify-between flex-wrap gap-3 ${
+            geminiStatus?.connected
+              ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+              : 'bg-amber-950/20 border-amber-500/30 text-amber-300'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${geminiStatus?.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <p className="text-xs font-bold text-white">
+                    {geminiStatus?.connected ? 'Gemini AI Connected & Operational' : 'Gemini AI Disconnected'}
+                  </p>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {geminiStatus?.message || 'Ready to analyze code errors and generate diagrams.'}
+                </p>
+              </div>
+            </div>
+
+            <span className="font-mono text-xs px-2.5 py-1 rounded bg-slate-900/90 border border-slate-800 text-purple-300 font-semibold">
+              {geminiStatus?.model || 'Gemini AI'}
+            </span>
+
+          </div>
+
+          {/* API Key Input Field */}
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-slate-200">
+              Custom Gemini API Key <span className="text-slate-500 font-normal">(Optional Override)</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  placeholder="Paste your Gemini API key (starts with AIza...)"
+                  value={geminiKeyInput}
+                  onChange={(e) => setGeminiKeyInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-9 pr-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-purple-500 transition font-mono"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveGeminiKey}
+                disabled={isVerifyingGemini}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 text-white text-xs font-semibold shadow-md shadow-purple-600/30 transition cursor-pointer shrink-0"
+              >
+                {isVerifyingGemini ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Verifying...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save &amp; Test</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              By default, CodeLens connects to the built-in system Gemini AI backend. You can optionally provide your own personal Gemini API key to override it.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
 
       {/* ─── 2. Explanation Level with Rich Content Cards ────────────────────── */}
       <SectionCard

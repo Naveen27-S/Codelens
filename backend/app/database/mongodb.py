@@ -11,8 +11,8 @@ _db = None
 
 def _create_indexes(db) -> None:
     """
-    Ensure required indexes exist on the executions, activities, and
-    dashboard_history collections. Called once after a successful connection.
+    Ensure required indexes exist on the executions, activities, dashboard_history,
+    and debug_sessions collections. Called once after a successful connection.
     """
     try:
         # ── executions ──────────────────────────────────────────────────────
@@ -48,7 +48,16 @@ def _create_indexes(db) -> None:
             name="idx_dh_user_created"
         )
         dh.create_index([("event_type", ASCENDING)], name="idx_dh_event_type")
-        logger.info("MongoDB indexes ensured on users / executions / activities / dashboard_history")
+        # ── debug_sessions ──────────────────────────────────────────────────
+        ds = db["debug_sessions"]
+        ds.create_index([("user_id", ASCENDING)], name="idx_ds_user_id")
+        ds.create_index(
+            [("user_id", ASCENDING), ("created_at", DESCENDING)],
+            name="idx_ds_user_created"
+        )
+        ds.create_index([("debug_id", ASCENDING)], unique=True, sparse=True, name="idx_ds_debug_id")
+        ds.create_index([("error_type", ASCENDING)], name="idx_ds_error_type")
+        logger.info("MongoDB indexes ensured on users / executions / activities / dashboard_history / debug_sessions")
     except OperationFailure as e:
         logger.warning("MongoDB index creation warning: %s", e)
     except Exception as e:

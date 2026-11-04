@@ -32,7 +32,7 @@ interface Props {
     lineNumber?: number | null;
     offendingLine?: string;
   } | null;
-  onApplyFix?: (rerun?: boolean) => void;
+  onApplyFix?: (rerun?: boolean, forceVisualize?: boolean) => void;
 }
 
 export const VisualizerPanel: React.FC<Props> = ({
@@ -78,7 +78,7 @@ export const VisualizerPanel: React.FC<Props> = ({
     setIsPlaying(false);
     voiceNarrator.stop();
 
-    if (steps.length > 0) {
+    if (steps.length > 0 && executionResult?.status === 'success') {
       setCurrentStepIndex(1);
       const step = steps[0];
       if (onCurrentLineChange) {
@@ -92,7 +92,12 @@ export const VisualizerPanel: React.FC<Props> = ({
         onCurrentLineChange(null);
       }
     }
-  }, [executionResult]);
+
+    if (executionResult && executionResult.status !== 'success') {
+      setActiveTab('structures');
+    }
+  }, [executionResult, errorExplanation]);
+
 
   const handleStepChange = (idx: number, speakAudio: boolean = true) => {
     setCurrentStepIndex(idx);
@@ -351,22 +356,45 @@ export const VisualizerPanel: React.FC<Props> = ({
                         </div>
                       )}
 
-                      {(errorExplanation.suggestedFix || errorExplanation.corrected_code) && (
-                        <div>
-                          <span className="text-[10px] uppercase font-bold text-emerald-400 block mb-0.5">
-                            ✅ Suggested Fix:
-                          </span>
-                          <div className="p-2 rounded bg-emerald-950/40 border border-emerald-900/50 text-emerald-200 overflow-x-auto truncate">
-                            <code>{(errorExplanation.suggestedFix || errorExplanation.corrected_code)?.trim()}</code>
+                      {(() => {
+                        const isProse = (str?: string) =>
+                          !str || /^(replace|declare|ensure|examine|verify|look for|fix|use\s+|expected|calling|in\s+[a-z]|like\s+|check|add\s+|remove)\b/i.test(str.trim());
+                        let fixText = (errorExplanation.suggestedFix || errorExplanation.corrected_code)?.trim() || '';
+                        if (isProse(fixText)) {
+                          fixText = '';
+                        }
+                        if (fixText) {
+                          const dQ = (fixText.match(/"/g) || []).length;
+                          const sQ = (fixText.match(/'/g) || []).length;
+                          if (dQ % 2 !== 0) fixText += '"';
+                          else if (sQ % 2 !== 0) fixText += "'";
+                          const oP = (fixText.match(/\(/g) || []).length;
+                          const cP = (fixText.match(/\)/g) || []).length;
+                          if (oP > cP) fixText += ')'.repeat(oP - cP);
+                          const oB = (fixText.match(/\[/g) || []).length;
+                          const cB = (fixText.match(/\]/g) || []).length;
+                          if (oB > cB) fixText += ']'.repeat(oB - cB);
+                          if (!fixText.endsWith(';') && !fixText.endsWith('{') && !fixText.endsWith('}')) {
+                            fixText += ';';
+                          }
+                        }
+                        return fixText ? (
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-emerald-400 block mb-0.5">
+                              ✅ Suggested Fix:
+                            </span>
+                            <div className="p-2 rounded bg-emerald-950/40 border border-emerald-900/50 text-emerald-200 overflow-x-auto truncate">
+                              <code>{fixText}</code>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        ) : null;
+                      })()}
                     </div>
 
                     {/* Apply Fix Button */}
                     {onApplyFix && (
                       <button
-                        onClick={() => onApplyFix(true)}
+                        onClick={() => onApplyFix(true, true)}
                         className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs shadow-lg shadow-emerald-900/40 transition-all cursor-pointer group"
                       >
                         <Sparkles className="w-4 h-4 text-emerald-200 group-hover:rotate-12 transition-transform" />
@@ -492,16 +520,49 @@ export const VisualizerPanel: React.FC<Props> = ({
         {/* ── Variables & Stack ─── */}
         {activeTab === 'variables' && (
           <div className="h-full overflow-y-auto p-4">
-            <VariableInspector currentStep={currentStep} />
+            {executionResult && executionResult.status !== 'success' ? (
+              <div className="h-full flex flex-col items-center justify-center p-6 text-center text-slate-400">
+                <AlertTriangle className="w-8 h-8 text-amber-400 mb-2 opacity-80" />
+                <p className="text-sm font-semibold text-slate-200">Variable State Unavailable</p>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs leading-relaxed">
+                  The program stopped due to an error before execution variables could be inspected.
+                </p>
+                <button
+                  onClick={() => setActiveTab('structures')}
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-medium hover:bg-indigo-600/50 transition cursor-pointer"
+                >
+                  View AI Debugger &amp; Fix
+                </button>
+              </div>
+            ) : (
+              <VariableInspector currentStep={currentStep} />
+            )}
           </div>
         )}
 
         {/* ── Flowchart ─── */}
         {activeTab === 'flowchart' && (
           <div className="w-full h-full min-h-[400px] overflow-auto p-2">
-            <MermaidViewer chart={mermaidChart} />
+            {executionResult && executionResult.status !== 'success' ? (
+              <div className="h-full min-h-[300px] flex flex-col items-center justify-center p-6 text-center text-slate-400">
+                <AlertTriangle className="w-8 h-8 text-amber-400 mb-2 opacity-80" />
+                <p className="text-sm font-semibold text-slate-200">Flowchart Generation Paused</p>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs leading-relaxed">
+                  Visualization is paused until code mistakes are fixed. Apply the AI fix to generate the full flowchart.
+                </p>
+                <button
+                  onClick={() => setActiveTab('structures')}
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-medium hover:bg-indigo-600/50 transition cursor-pointer"
+                >
+                  View AI Debugger &amp; Fix
+                </button>
+              </div>
+            ) : (
+              <MermaidViewer chart={mermaidChart} />
+            )}
           </div>
         )}
+
       </div>
 
       {/* ─── Bottom Playback Toolbar ────────────────────────────────────── */}

@@ -314,6 +314,108 @@ function analyzeMistakeDetails(
 
   // ───────────────────────── JAVA MISTAKES ─────────────────────────
   if (language === 'java') {
+    // 00. Cannot find symbol: class 'XYZ' (Unknown or misspelled data type)
+    const classSymbolMatch = errorText.match(/Cannot find symbol: class '([a-zA-Z0-9_]+)'(?:\. Did you mean '([a-zA-Z0-9_]+)')?/i);
+    if (classSymbolMatch) {
+      const wrongType = classSymbolMatch[1];
+      const suggestedType = classSymbolMatch[2];
+      const fixed = suggestedType ? line.replace(new RegExp(`\\b${wrongType}\\b`), suggestedType) : line;
+      return {
+        title: `Unknown Data Type '${wrongType}' (Compilation Error)`,
+        description: suggestedType
+          ? `Type mistake on line ${lineNum || '?'}: '${wrongType}' is not a recognized Java type. Did you mean '${suggestedType}'?`
+          : `Type mistake on line ${lineNum || '?'}: '${wrongType}' is not a recognized Java type or class.`,
+        expected: suggestedType ? `Expected valid Java type '${suggestedType}'` : `Expected a valid Java data type (e.g. 'boolean', 'int', 'String').`,
+        suggestedFix: fixed,
+      };
+    }
+    // 0a. Misspelled Java Keyword (Alphabet typos: blooean, whlie, fro, publc, statc, etc.)
+    const keywordTypoMatch = errorText.match(/Misspelled keyword '([a-zA-Z0-9_]+)'\. Did you mean '([a-zA-Z0-9_]+)'/i);
+    if (keywordTypoMatch) {
+      const wrong = keywordTypoMatch[1];
+      const correct = keywordTypoMatch[2];
+      const fixed = line.replace(new RegExp(`\\b${wrong}\\b`), correct);
+      return {
+        title: `Misspelled Keyword '${wrong}' (Syntax Error)`,
+        description: `Alphabet mistake on line ${lineNum || '?'}: '${wrong}' is not a valid Java keyword. Did you mean '${correct}'?`,
+        expected: `Expected keyword '${correct}' instead of '${wrong}'.`,
+        suggestedFix: fixed,
+      };
+    }
+
+    // 0b. Unknown Method on System.out (prntln, printl, etc.)
+    const printTypoMatch = errorText.match(/method '([a-zA-Z0-9_]+)' on 'System\.out'\. Did you mean '([a-zA-Z0-9_]+)'/i);
+    if (printTypoMatch) {
+      const wrong = printTypoMatch[1];
+      const correct = printTypoMatch[2];
+      const fixed = line.replace(new RegExp(`\\b${wrong}\\b`), correct);
+      return {
+        title: `Unknown Print Method '${wrong}' (Compilation Error)`,
+        description: `Alphabet mistake on line ${lineNum || '?'}: Method '${wrong}' does not exist on 'System.out'. Did you mean '${correct}'?`,
+        expected: `Expected 'System.out.${correct}(...)'`,
+        suggestedFix: fixed,
+      };
+    }
+
+    // 0c. Case sensitivity on System
+    if (errLower.includes("package 'system' does not exist") || errLower.includes("system is case-sensitive")) {
+      const fixed = line.replace(/\bsystem\b/g, 'System');
+      return {
+        title: "Case Sensitivity Error on 'System' (Compilation Error)",
+        description: `Java is case-sensitive. 'system' must be capitalized as 'System'.`,
+        expected: `Expected 'System.out.println' with uppercase 'S'.`,
+        suggestedFix: fixed,
+      };
+    }
+
+    // 0d. Assignment in condition: e.g. if (x = 5)
+    if (errLower.includes("invalid assignment in condition") || /\b(if|while)\s*\([^)]*?[^=!<>]=(?!=)[^=]/.test(line)) {
+      const fixed = line.replace(/([^=!<>]|^)=(?!=)/g, '$1==');
+      return {
+        title: "Assignment in Condition (Syntax Error)",
+        description: `You used a single '=' (assignment operator) inside a condition instead of '==' (equality comparison operator).`,
+        expected: `Use '==' to compare values in boolean conditions.`,
+        suggestedFix: fixed,
+      };
+    }
+
+    // 0e. Equality operator in statement: e.g. prime == false;
+    if (errLower.includes("not a statement") && line.includes('==')) {
+      const fixed = line.replace(/==/g, '=');
+      return {
+        title: "Equality Operator '==' Used as Statement (Syntax Error)",
+        description: `'==' is an equality check operator, not an assignment. To assign a value, use a single '='.`,
+        expected: `Expected assignment operator '=' instead of '=='.`,
+        suggestedFix: fixed,
+      };
+    }
+
+    // 0f. Undefined Variable / Symbol typo
+    const varSymbolMatch = errorText.match(/Cannot find symbol: variable '([a-zA-Z0-9_]+)'(?:\. Did you mean '([a-zA-Z0-9_]+)')?/i);
+    if (varSymbolMatch) {
+      const wrongVar = varSymbolMatch[1];
+      const suggestedVar = varSymbolMatch[2];
+      const fixed = suggestedVar ? line.replace(new RegExp(`\\b${wrongVar}\\b`), suggestedVar) : line;
+      return {
+        title: `Undefined Variable '${wrongVar}' (Compilation Error)`,
+        description: suggestedVar
+          ? `Variable '${wrongVar}' is not defined. Did you mean '${suggestedVar}'?`
+          : `Variable '${wrongVar}' was used without being declared. Declare it with its type first (e.g. 'int ${wrongVar};').`,
+        expected: suggestedVar ? `Expected '${suggestedVar}'` : `Expected variable '${wrongVar}' to be declared.`,
+        suggestedFix: fixed,
+      };
+    }
+
+    // 0g. Unrecognized Statement
+    const unrecMatch = errorText.match(/Unrecognized statement or invalid syntax: '([^']+)'/i);
+    if (unrecMatch) {
+      return {
+        title: "Invalid Statement Syntax (Compilation Error)",
+        description: `The statement '${unrecMatch[1]}' does not match any valid Java statement or declaration.`,
+        expected: `Verify the spelling of types, variables, and keywords on line ${lineNum || '?'}.`,
+        suggestedFix: line,
+      };
+    }
     // 1. Missing class declaration
     if (errLower.includes('missing java class') || !lines.some(l => /\bclass\s+[a-zA-Z0-9_]+/.test(l))) {
       return {
@@ -334,17 +436,55 @@ function analyzeMistakeDetails(
       };
     }
 
-    // 3. Missing Semicolon
+    // 2. Unclosed string literal in Java
+    const doubleQuotes = (line.match(/"/g) || []).length;
+    const singleQuotes = (line.match(/'/g) || []).length;
+    const openParens = (line.match(/\(/g) || []).length;
+    const closeParens = (line.match(/\)/g) || []).length;
+
+    if (errLower.includes('unclosed string') || errLower.includes('unterminated string') || (doubleQuotes % 2 !== 0) || (singleQuotes % 2 !== 0)) {
+      let fixedLine = line;
+      if (doubleQuotes % 2 !== 0) fixedLine += '"';
+      if (singleQuotes % 2 !== 0) fixedLine += "'";
+      if (openParens > closeParens) fixedLine += ')'.repeat(openParens - closeParens);
+      if (!fixedLine.endsWith(';')) fixedLine += ';';
+
+      return {
+        title: "Unclosed String Literal & Syntax Error",
+        description: `A string quotation was left unclosed on line ${lineNum || ''}, causing syntax errors. Java strings must end with a matching closing quote.`,
+        expected: `Expected matching closing quote (${doubleQuotes % 2 !== 0 ? '"' : "'"}) and closing parenthesis before semicolon ';'.`,
+        suggestedFix: fixedLine,
+      };
+    }
+
+    // 3. Unbalanced Parentheses
+    if (openParens > closeParens) {
+      let fixedLine = line + ')'.repeat(openParens - closeParens);
+      if (!fixedLine.endsWith(';')) fixedLine += ';';
+      return {
+        title: "Missing Closing Parenthesis ')'",
+        description: `Line ${lineNum || ''} is missing ${openParens - closeParens} closing parenthesis ')' to complete the method call or expression.`,
+        expected: `Expected matching ')' and ';' at the end of the statement.`,
+        suggestedFix: fixedLine,
+      };
+    }
+
+    // 4. Missing Semicolon
     if (
       errLower.includes('expected ;') ||
       errLower.includes("missing ;") ||
       (!line.endsWith(';') && !line.endsWith('{') && !line.endsWith('}') && !line.startsWith('//') && !line.startsWith('import ') && !line.startsWith('package ') && !line.startsWith('public class') && !line.startsWith('class ') && line.length > 0)
     ) {
+      let fixedLine = line;
+      if (doubleQuotes % 2 !== 0) fixedLine += '"';
+      if (openParens > closeParens) fixedLine += ')'.repeat(openParens - closeParens);
+      if (!fixedLine.endsWith(';')) fixedLine += ';';
+
       return {
         title: "Missing Semicolon ';' (Syntax Error)",
         description: `In Java, every statement must terminate with a semicolon ';'. Line ${lineNum || ''} is missing a semicolon.`,
         expected: `Expected a semicolon ';' at the end of the line.`,
-        suggestedFix: `${line};`,
+        suggestedFix: fixedLine,
       };
     }
   }
@@ -418,6 +558,32 @@ function analyzeMistakeDetails(
 /**
  * Scans code lines for common syntax errors if the runner provided no line number.
  */
+const COMMON_KEYWORD_TYPOS: Record<string, string> = {
+  blooean: 'boolean', boolen: 'boolean', booean: 'boolean', bool: 'boolean',
+  itn: 'int', intt: 'int', integer: 'int',
+  stirng: 'String', string: 'String', strign: 'String', strng: 'String',
+  dobule: 'double', doubel: 'double', doulbe: 'double',
+  flot: 'float', flaot: 'float',
+  viod: 'void', voidd: 'void', voide: 'void',
+  publc: 'public', pubilc: 'public', pulbic: 'public', pbulic: 'public',
+  statc: 'static', staic: 'static', statick: 'static',
+  calss: 'class', clss: 'class', claas: 'class', clas: 'class',
+  improt: 'import', impot: 'import',
+  packge: 'package', pakage: 'package',
+  whlie: 'while', wile: 'while', whil: 'while',
+  fro: 'for', foor: 'for',
+  iff: 'if', fi: 'if',
+  esle: 'else', lese: 'else', elese: 'else',
+  braek: 'break', brak: 'break', brek: 'break',
+  contnue: 'continue', continew: 'continue', contin: 'continue',
+  retrun: 'return', retun: 'return', reutrn: 'return', retren: 'return',
+  ture: 'true', tru: 'true',
+  flase: 'false', fals: 'false', fasle: 'false',
+  mian: 'main', man: 'main',
+  prnt: 'print', pritn: 'print',
+  defina: 'def', funciton: 'function', fucntion: 'function',
+};
+
 function scanCodeForSyntaxMistakes(
   language: string,
   lines: string[]
@@ -427,6 +593,40 @@ function scanCodeForSyntaxMistakes(
     const line = raw.trim();
     if (!line || line.startsWith('//') || line.startsWith('#') || line.startsWith('/*')) {
       continue;
+    }
+
+    const clean = line.replace(/\/\/.*$/, '').replace(/"[^"]*"/g, '""').replace(/'[^']*'/g, "''");
+
+    // 1. Scan for alphabet-level keyword typos across every word
+    const words = clean.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) || [];
+    for (const w of words) {
+      const lower = w.toLowerCase();
+      if (COMMON_KEYWORD_TYPOS[lower] && w !== COMMON_KEYWORD_TYPOS[lower]) {
+        return { line: i + 1, column: raw.indexOf(w) + 1 };
+      }
+    }
+
+    // 2. Scan for System.out method typos
+    if (/\b(System|system)\.(out|Out)\.([a-zA-Z0-9_]+)/.test(clean)) {
+      const m = clean.match(/\b(System|system)\.(out|Out)\.([a-zA-Z0-9_]+)/);
+      if (m && (m[1] === 'system' || ['prntln', 'printl', 'printlnn', 'pritnln', 'pritn', 'prnt', 'printt'].includes(m[3]))) {
+        return { line: i + 1, column: raw.indexOf(m[0]) + 1 };
+      }
+    }
+
+    // 3. Scan for assignment in condition: if (x = 5)
+    if (/\b(if|while)\s*\([^)]*?[^=!<>]=(?!=)[^=][^)]*\)/.test(clean)) {
+      return { line: i + 1, column: raw.indexOf('=') + 1 };
+    }
+
+    // 4. Scan for statement with equality check: prime == false;
+    if (/^([a-zA-Z0-9_]+)\s*==\s*([^;]+);/.test(clean)) {
+      return { line: i + 1, column: raw.indexOf('==') + 1 };
+    }
+
+    // 5. Scan for inverted comparison operators: =< or => or =!
+    if (/(=<|=>|=!)/.test(clean)) {
+      return { line: i + 1, column: raw.search(/(=<|=>|=!)/) + 1 };
     }
 
     // Python checks
@@ -442,6 +642,18 @@ function scanCodeForSyntaxMistakes(
       // Unclosed string
       if ((line.match(/"/g) || []).length % 2 !== 0 || (line.match(/'/g) || []).length % 2 !== 0) {
         return { line: i + 1, column: raw.length + 1 };
+      }
+    }
+
+    // Java invalid data type scan
+    if (language === 'java') {
+      const dMatch = clean.match(/^([a-zA-Z0-9_<>[\]]+)\s+([a-zA-Z0-9_]+)\s*(?:=|;)/);
+      if (dMatch && !/^(public|private|protected|static|return|if|else|for|while|do|switch|case|break|continue|import|package|class)$/.test(dMatch[1])) {
+        const base = dMatch[1].replace(/<.*?>/g, '').replace(/\[\]/g, '').trim();
+        const validTypes = ['byte', 'short', 'int', 'long', 'float', 'double', 'boolean', 'char', 'void', 'var', 'String', 'Integer', 'Double', 'Float', 'Long', 'Boolean', 'Character', 'Object', 'Scanner', 'Math', 'Arrays', 'List', 'ArrayList', 'Map', 'HashMap', 'Set', 'HashSet', 'Queue', 'Stack', 'StringBuilder', 'TreeNode', 'ListNode', 'Main'];
+        if (!validTypes.includes(base)) {
+          return { line: i + 1, column: raw.indexOf(dMatch[1]) + 1 };
+        }
       }
     }
 

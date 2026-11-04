@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, RotateCcw, Save, Sparkles, Terminal, Keyboard, Code, Bug, Wand2, CheckCircle, AlertTriangle, X, ChevronUp, ChevronDown, Trash2, GripHorizontal } from 'lucide-react';
+import { Play, RotateCcw, Save, Sparkles, Terminal, Keyboard, Code, Bug, CheckCircle, AlertTriangle, X, ChevronUp, ChevronDown, Trash2, GripHorizontal } from 'lucide-react';
 import axios from 'axios';
 import { useSettings } from '../context/SettingsContext';
 import { recordUserActivity, recordSessionTime } from '../services/dashboardService';
@@ -249,6 +249,8 @@ export function EditorPage() {
 
   const [isRunning, setIsRunning] = useState(false);
   const [isVisualizing, setIsVisualizing] = useState(false);
+  const lastActionRef = useRef<'run' | 'visualize'>('run');
+
 
   // Active practice & platform accessing time tracking
   const sessionStartRef = useRef<number>(Date.now());
@@ -462,6 +464,10 @@ export function EditorPage() {
         try {
           localStorage.setItem(STORAGE_KEY_DRAFTS, JSON.stringify(next));
         } catch {}
+        // Reset console output when user edits code and not currently running
+        if (!isRunning) {
+          setOutput('');
+        }
         return next;
       });
     }
@@ -470,6 +476,9 @@ export function EditorPage() {
   const handleLanguageChange = (newLang: string) => {
     const normalized = newLang.toLowerCase();
     setLanguage(normalized);
+    // Reset console output and visualizer when switching language
+    setOutput('');
+    setVisualization('');
 
     setCodeByLanguage((prev) => {
       if (prev[normalized] !== undefined && !isLegacyPlaceholder(prev[normalized])) {
@@ -496,33 +505,111 @@ export function EditorPage() {
     return `${indent}${trimmedFix}`;
   };
 
-  const handleApplyFix = (rerunAfterFix: boolean = true) => {
+  // Robust syntax auto-repair for missing quotes, parentheses, brackets, or semicolons
+  const autoRepairSyntaxLine = (lineStr: string, lang: string): string => {
+    let fixed = lineStr.trimEnd();
+    if (!fixed) return fixed;
+
+    // 1. Balance double / single quotes
+    const dQuotes = (fixed.match(/"/g) || []).length;
+    const sQuotes = (fixed.match(/'/g) || []).length;
+    if (dQuotes % 2 !== 0) fixed += '"';
+    else if (sQuotes % 2 !== 0) fixed += "'";
+
+    // 2. Balance parentheses
+    const openP = (fixed.match(/\(/g) || []).length;
+    const closeP = (fixed.match(/\)/g) || []).length;
+    if (openP > closeP) fixed += ')'.repeat(openP - closeP);
+
+    // 3. Balance square brackets
+    const openB = (fixed.match(/\[/g) || []).length;
+    const closeB = (fixed.match(/\]/g) || []).length;
+    if (openB > closeB) fixed += ']'.repeat(openB - closeB);
+
+    // 4. Semicolon for Java / C / C++
+    if (['java', 'c', 'cpp'].includes(lang.toLowerCase())) {
+      if (!fixed.endsWith(';') && !fixed.endsWith('{') && !fixed.endsWith('}')) {
+        fixed += ';';
+      }
+    }
+    return fixed;
+  };
+
+  const handleApplyFix = (rerunAfterFix: boolean = true, forceVisualize: boolean = true) => {
     if (!errorExplanation) return;
 
     const lineNum = errorExplanation.lineNumber;
     const fixSnippet = errorExplanation.suggestedFix || errorExplanation.corrected_code;
     const fullCode = errorExplanation.fullCorrectedCode;
 
+    // Helper to detect English explanations / prose
+    const isProse = (str?: string) =>
+      !str || /^(replace|declare|ensure|examine|verify|look for|fix|use\s+|expected|calling|in\s+[a-z]|like\s+|check|add\s+|remove)\b/i.test(str.trim());
+
+    // Clean any markdown fences from AI response
+    const cleanFullCode = (fullCode || '')
+      .replace(/^```[a-zA-Z0-9_-]*\n?/i, '')
+      .replace(/\n?```$/i, '')
+      .trim();
+    const cleanSnippet = (fixSnippet || '')
+      .replace(/^```[a-zA-Z0-9_-]*\n?/i, '')
+      .replace(/\n?```$/i, '')
+      .trim();
+
+    let effectiveSnippet = isProse(cleanSnippet) ? '' : cleanSnippet;
     let newCode = currentCode;
 
-    if (fullCode && fullCode.trim().length > 0 && fullCode.trim() !== currentCode.trim()) {
-      newCode = fullCode;
-    } else if (lineNum && lineNum >= 1 && fixSnippet) {
+    // Check if line needs syntax repair or keyword repair
+    if (lineNum && lineNum >= 1) {
       const lines = currentCode.split('\n');
       if (lineNum <= lines.length) {
         const offending = lines[lineNum - 1];
-        const fixedLine = formatLineFixWithIndentation(offending, fixSnippet);
+        if (!effectiveSnippet || effectiveSnippet.trim() === offending.trim()) {
+          effectiveSnippet = autoRepairSyntaxLine(offending, language);
+        } else {
+          effectiveSnippet = autoRepairSyntaxLine(effectiveSnippet, language);
+        }
+      }
+    }
+
+    // Only accept fullCode if none of its lines are prose explanations
+    const fullCodeHasProse = cleanFullCode && cleanFullCode.split('\n').some((l) => isProse(l.trim()));
+    if (cleanFullCode && !fullCodeHasProse && cleanFullCode !== currentCode.trim()) {
+      newCode = cleanFullCode;
+    } else if (lineNum && lineNum >= 1 && effectiveSnippet && !isProse(effectiveSnippet)) {
+      const lines = currentCode.split('\n');
+      if (lineNum <= lines.length) {
+        const offending = lines[lineNum - 1];
+        const fixedLine = formatLineFixWithIndentation(offending, effectiveSnippet);
         lines[lineNum - 1] = fixedLine;
         newCode = lines.join('\n');
       }
     }
 
-    if (newCode === currentCode) return;
+    // Fallback: If code is still unchanged, forcefully auto-repair the offending line
+    if (newCode === currentCode && lineNum && lineNum >= 1) {
+      const lines = currentCode.split('\n');
+      if (lineNum <= lines.length) {
+        const offending = lines[lineNum - 1];
+        const repaired = autoRepairSyntaxLine(offending, language);
+        if (repaired.trim() !== offending.trim()) {
+          lines[lineNum - 1] = formatLineFixWithIndentation(offending, repaired);
+          newCode = lines.join('\n');
+          effectiveSnippet = repaired.trim();
+        }
+      }
+    }
+
+    if (newCode === currentCode) {
+      addToast('info', 'Code Unchanged', 'Suggested fix is already present in your code.');
+      return;
+    }
 
     // 1. Update code state for current language
     setCodeByLanguage((prev) => ({
       ...prev,
       [language]: newCode,
+      ...(activeProblem ? { [`problem_${activeProblem.id}_${language}`]: newCode } : {}),
     }));
 
     // 2. Update Monaco editor instance directly
@@ -533,40 +620,41 @@ export function EditorPage() {
     // 3. Clear mistake decoration
     highlightErrorLine(null);
 
-    // 4. Update the console output to clearly document the mistake change
-    const oldLineStr = errorExplanation.offendingLine || `Line ${lineNum || '?'}`;
-    const newLineStr = fixSnippet || 'Corrected code';
-    const fixLog = `✨ [AI Auto-Fix Applied]
-──────────────────────────────────────────────────────────────
-Fixed Mistake on Line ${lineNum || '?'}:
-  ❌ Before: ${oldLineStr.trim()}
-  ✅ After:  ${newLineStr.trim()}
-
-${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ Corrected code applied to editor.'}`;
-
-    setOutput(fixLog);
+    if (rerunAfterFix) {
+      setOutput('▶ AI Fix applied to editor. Re-running code...');
+    } else {
+      setOutput('✓ Corrected code applied to editor. Click "Run Code" to execute.');
+    }
     setErrorExplanation(null);
+    setIsRunning(false);
+    setIsVisualizing(false);
+    addToast('success', 'AI Fix Applied', `Corrected mistake on Line ${lineNum || '?'}. ${rerunAfterFix ? 'Re-running code...' : 'Ready to run.'}`);
 
-    // 5. If rerun requested, immediately trigger Debug & Visualize on the corrected code
+    // 5. If rerun requested, immediately trigger execution based on what the user last used or forceVisualize
     if (rerunAfterFix) {
       setTimeout(() => {
-        handleVisualizeCode(newCode, language, stdin);
-      }, 250);
+        if (forceVisualize || lastActionRef.current === 'visualize') {
+          handleVisualizeCode(newCode, language, stdin);
+        } else {
+          handleRunCode(newCode, language, stdin);
+        }
+      }, 150);
     }
   };
 
   // 100% Client-Side Execution Handler
   const handleRunCode = async (overrideCode?: string, overrideLang?: string, overrideInput?: string) => {
+    lastActionRef.current = 'run';
     const langToRun = (overrideLang !== undefined ? overrideLang : language).toLowerCase();
     const codeToRun = overrideCode !== undefined ? overrideCode : currentCode;
     const inputToUse = overrideInput !== undefined ? overrideInput : stdin;
 
+    // Reset UI state for a clean run
     setIsRunning(true);
-    if (settings.clearTerminalBeforeRun) {
-      setOutput('⚙ Executing in-browser...');
-    } else {
-      setOutput((prev) => (prev ? `${prev}\n\n⚙ Executing in-browser...` : '⚙ Executing in-browser...'));
-    }
+    setConsoleCollapsed(false);
+    highlightErrorLine(null);
+    // Always start with fresh terminal output regardless of settings
+    setOutput('⚙ Executing in-browser...');
     setErrorExplanation(null);
 
     try {
@@ -580,15 +668,11 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
 
       if (clientRes.status === 'success') {
         const memoryStr = clientRes.memoryUsedKb ? ` | Memory: ~${clientRes.memoryUsedKb} KB` : '';
-        const runOutput = (clientRes.stdout || 'Execution completed cleanly (no stdout output)') + `\n\n✓ In-Browser Execution Completed\nTime: ${clientRes.executionTimeMs} ms${memoryStr}`;
+        const cleanStdout = clientRes.stdout ? clientRes.stdout.replace(/\n+$/, '') : '';
+        
+        const runOutput = (cleanStdout || 'Execution completed cleanly (no stdout output)') + `\n\n✓ In-Browser Execution Completed\nTime: ${clientRes.executionTimeMs} ms${memoryStr}`;
+        setOutput(runOutput);
 
-        setOutput((prev) => {
-          if (settings.clearTerminalBeforeRun || !prev || prev === '⚙ Executing in-browser...') {
-            return runOutput;
-          }
-          const cleanPrev = prev.replace(/\n\n⚙ Executing in-browser\.\.\.$/, '');
-          return cleanPrev ? `${cleanPrev}\n\n──────────────────────────────────────────────────\n[New Execution]\n${runOutput}` : runOutput;
-        });
 
         setErrorExplanation(null);
         highlightErrorLine(null);
@@ -598,11 +682,9 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
         }
       } else if (clientRes.status === 'timeout') {
         const timeoutOutput = `⏱ Execution Timed Out (5s limit)\n${clientRes.stderr}`;
-        setOutput((prev) => {
-          if (settings.clearTerminalBeforeRun || !prev || prev === '⚙ Executing in-browser...') return timeoutOutput;
-          const cleanPrev = prev.replace(/\n\n⚙ Executing in-browser\.\.\.$/, '');
-          return cleanPrev ? `${cleanPrev}\n\n──────────────────────────────────────────────────\n[New Execution]\n${timeoutOutput}` : timeoutOutput;
-        });
+        // Show clear timeout message
+        setOutput(timeoutOutput);
+
 
         setErrorExplanation({
           problem: 'Execution Timeout',
@@ -621,11 +703,9 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
           highlightErrorLine(mistakeReport.lineNumber);
         }
         const errorOut = mistakeReport.terminalOutput;
-        setOutput((prev) => {
-          if (settings.clearTerminalBeforeRun || !prev || prev === '⚙ Executing in-browser...') return errorOut;
-          const cleanPrev = prev.replace(/\n\n⚙ Executing in-browser\.\.\.$/, '');
-          return cleanPrev ? `${cleanPrev}\n\n──────────────────────────────────────────────────\n[New Execution]\n${errorOut}` : errorOut;
-        });
+        // Show error output directly
+        setOutput(errorOut);
+
 
         if (settings.notifyExecutionErrors) {
           addToast('error', 'Execution Errors', `Runtime error detected in ${langToRun.toUpperCase()} code. View terminal output.`);
@@ -642,60 +722,55 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
         };
         setErrorExplanation(initialExplanation);
 
-        // Query backend AI debug endpoint for enhanced Gemini explanation
+        // Query backend AI debug endpoint in background for enhanced Gemini explanation
         axios.post(`${API_URL}/ai/debug`, {
           language: langToRun,
           code: codeToRun,
           error: clientRes.stderr,
         }, { headers: authHeaders() }).then((aiRes) => {
           if (aiRes.data && (aiRes.data.problem || aiRes.data.explanation)) {
+            const data = aiRes.data;
+            const isProse = (s?: string) => !s || /^(replace|declare|ensure|examine|verify|look for|fix|use\s+|expected|calling|in\s+[a-z]|like\s+|check|add\s+|remove)\b/i.test(s.trim());
+            const backendFix = isProse(data.suggested_fix) ? null : data.suggested_fix;
+            const validFix = backendFix || mistakeReport.suggestedFixSnippet;
+
             setErrorExplanation((prev) => prev ? ({
               ...prev,
-              problem: aiRes.data.problem || prev.problem,
-              explanation: aiRes.data.explanation || prev.explanation,
-              solution: aiRes.data.solution || prev.solution,
-              corrected_code: aiRes.data.corrected_code || prev.corrected_code,
-              fullCorrectedCode: aiRes.data.corrected_code,
+              problem: data.problem || prev.problem,
+              explanation: data.explanation || prev.explanation,
+              solution: data.solution || prev.solution,
+              suggestedFix: validFix || prev.suggestedFix,
+              corrected_code: validFix || prev.corrected_code,
+              lineNumber: data.line_number || prev.lineNumber,
+              offendingLine: data.offending_line || prev.offendingLine,
+              fullCorrectedCode: (data.corrected_code && !isProse(data.corrected_code)) ? data.corrected_code : undefined,
             }) : null);
           }
         }).catch(() => {});
       }
 
-      // Record code execution to backend MongoDB (activities collection)
-      try {
-        const langConfig = getLanguageConfig(langToRun);
-        const programTitle = activeProblem ? activeProblem.title : `${langConfig.label} Program`;
-        // 1. POST to /execute to store in executions + activities
-        await axios.post(`${API_URL}/execute`, {
-          language: langToRun,
-          code: codeToRun,
-          input: inputToUse,
-          program_name: programTitle,
-          program_id: activeProblem?.id || null,
-        }, { headers: authHeaders() });
-        // 2. Also explicitly record a code_execution activity with realistic practice duration
-        const elapsedSec = Math.max(60, Math.round((Date.now() - sessionStartRef.current) / 1000));
-        sessionStartRef.current = Date.now();
+      // Record activity to backend in background (fire-and-forget, non-blocking)
+      const langConfig = getLanguageConfig(langToRun);
+      const programTitle = activeProblem ? activeProblem.title : `${langConfig.label} Program`;
+      const elapsedSec = Math.max(60, Math.round((Date.now() - sessionStartRef.current) / 1000));
+      sessionStartRef.current = Date.now();
 
-        await recordUserActivity({
-          activity_type: 'code_execution',
-          title: `Ran ${langConfig.label} Program`,
-          description: `Executed ${langToRun} code (${clientRes.status}).`,
-          language: langToRun,
-          program_name: programTitle,
-          topic: activeProblem?.category || undefined,
-          status: clientRes.status === 'success' ? 'completed' : 'error',
-          duration_seconds: elapsedSec,
-          metadata_json: {
-            execution_status: clientRes.status,
-            execution_time_ms: clientRes.executionTimeMs,
-            program_id: activeProblem?.id || null,
-            source_code: codeToRun,
-          },
-        });
-      } catch {
-        // Backend optional — UI always works
-      }
+      recordUserActivity({
+        activity_type: 'code_execution',
+        title: `Ran ${langConfig.label} Program`,
+        description: `Executed ${langToRun} code (${clientRes.status}).`,
+        language: langToRun,
+        program_name: programTitle,
+        topic: activeProblem?.category || undefined,
+        status: clientRes.status === 'success' ? 'completed' : 'error',
+        duration_seconds: elapsedSec,
+        metadata_json: {
+          execution_status: clientRes.status,
+          execution_time_ms: clientRes.executionTimeMs,
+          program_id: activeProblem?.id || null,
+          source_code: codeToRun,
+        },
+      }).catch(() => {});
     } catch (err: any) {
       setOutput(`Client-side execution failed: ${err.message || String(err)}`);
     } finally {
@@ -705,12 +780,15 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
 
   // 100% Client-Side Debug & Visualization Handler
   const handleVisualizeCode = async (overrideCode?: string, overrideLang?: string, overrideInput?: string) => {
+    lastActionRef.current = 'visualize';
     const langToViz = (overrideLang !== undefined ? overrideLang : language).toLowerCase();
     const codeToViz = overrideCode !== undefined ? overrideCode : currentCode;
     const inputToUse = overrideInput !== undefined ? overrideInput : stdin;
 
     setIsVisualizing(true);
     setVisualization('Generating diagram...');
+    setConsoleCollapsed(false);
+    highlightErrorLine(null);
 
     try {
       // 1. Run client-side execution to capture step-by-step variables and frames
@@ -718,11 +796,15 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
       setClientExecutionResult(clientRes);
 
       if (clientRes.status !== 'success') {
+        setShowViz(true);
+        setVisualization('');
+
         const mistakeReport = diagnoseCodeMistake(langToViz, codeToViz, clientRes.stderr, clientRes.stdout);
         if (mistakeReport.lineNumber) {
           highlightErrorLine(mistakeReport.lineNumber);
         }
         setOutput(mistakeReport.terminalOutput);
+
         const initialExplanation: AIErrorExplanation = {
           problem: mistakeReport.mistakeTitle,
           explanation: `Line ${mistakeReport.lineNumber || '?'}: ${mistakeReport.mistakeDescription}`,
@@ -735,26 +817,60 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
         };
         setErrorExplanation(initialExplanation);
 
-        // Query backend AI debug endpoint for enhanced Gemini explanation
+        if (settings.notifyExecutionErrors) {
+          addToast('error', 'Error Detected', `${mistakeReport.mistakeTitle}. AI Debugger is analyzing...`);
+        }
+
+        // Query backend AI debug endpoint in background for enhanced Gemini explanation
         axios.post(`${API_URL}/ai/debug`, {
           language: langToViz,
           code: codeToViz,
-          error: clientRes.stderr,
+          error: clientRes.stderr || mistakeReport.mistakeDescription || '',
+          line_number: mistakeReport.lineNumber,
+          terminal_output: mistakeReport.terminalOutput,
         }, { headers: authHeaders() }).then((aiRes) => {
-          if (aiRes.data && (aiRes.data.problem || aiRes.data.explanation)) {
-            setErrorExplanation((prev) => prev ? ({
-              ...prev,
-              problem: aiRes.data.problem || prev.problem,
-              explanation: aiRes.data.explanation || prev.explanation,
-              solution: aiRes.data.solution || prev.solution,
-              corrected_code: aiRes.data.corrected_code || prev.corrected_code,
-              fullCorrectedCode: aiRes.data.corrected_code,
-            }) : null);
+          if (aiRes && aiRes.data && (aiRes.data.problem || aiRes.data.explanation)) {
+            const data = aiRes.data;
+            const isProse = (s?: string) => !s || /^(replace|declare|ensure|examine|verify|look for|fix|use\s+|expected|calling|in\s+[a-z]|like\s+|check|add\s+|remove)\b/i.test(s.trim());
+            const backendFix = isProse(data.suggested_fix) ? null : data.suggested_fix;
+            let chosenFix = (backendFix && backendFix.trim() !== (data.offending_line || mistakeReport.offendingLine || '').trim())
+              ? backendFix
+              : (mistakeReport.suggestedFixSnippet || '');
+
+            // Ensure chosenFix has all missing quotes, parens, brackets, and semicolons
+            if (chosenFix) {
+              chosenFix = autoRepairSyntaxLine(chosenFix, langToViz);
+            }
+
+            const updatedExplanation: AIErrorExplanation = {
+              problem: data.problem || mistakeReport.mistakeTitle,
+              explanation: data.explanation || mistakeReport.mistakeDescription,
+              solution: data.solution || mistakeReport.expectedInCode,
+              suggestedFix: chosenFix,
+              corrected_code: chosenFix,
+              lineNumber: data.line_number || mistakeReport.lineNumber,
+              offendingLine: data.offending_line || mistakeReport.offendingLine,
+              fullCorrectedCode: (data.corrected_code && !isProse(data.corrected_code)) ? data.corrected_code : undefined,
+              language: langToViz,
+            };
+            setErrorExplanation(updatedExplanation);
+            if (data.line_number) {
+              highlightErrorLine(data.line_number);
+            }
+            addToast('ai', 'AI Fix Ready', `AI identified the issue: ${data.problem || 'Click Apply Fix'}`);
           }
         }).catch(() => {});
+
+        // Return early: visualization is disallowed until error is fixed
+        return;
       } else {
         highlightErrorLine(null);
         setErrorExplanation(null);
+        const memoryStr = clientRes.memoryUsedKb ? ` | Memory: ~${clientRes.memoryUsedKb} KB` : '';
+        const cleanStdout = clientRes.stdout ? clientRes.stdout.replace(/\n+$/, '') : '';
+        
+        const runOutput = (cleanStdout || 'Execution completed cleanly (no stdout output)') + `\n\n✓ In-Browser Execution Completed\nTime: ${clientRes.executionTimeMs} ms${memoryStr}`;
+        setOutput(runOutput);
       }
 
       // 2. Try backend AI flowchart; fallback to 100% client-side flowchart generator
@@ -1217,7 +1333,7 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
                             .replace(/>/g, '&gt;')
                             .replace(/(✓[^\n]*)/g, '<span style="color:#34d399">$1</span>')
                             .replace(/(⏱[^\n]*|Timed Out[^\n]*)/g, '<span style="color:#fbbf24">$1</span>')
-                            .replace(/(✗[^\n]*|Error[^\n]*|Traceback[^\n]*|Exception[^\n]*)/g, '<span style="color:#f87171">$1</span>')
+                            .replace(/(✗[^\n]*|(?:^|\n)(?:Error:|Exception|Traceback|SyntaxError|RuntimeError|TypeError|NameError|IndexError|ValueError|NullPointerException|ArrayIndexOutOfBoundsException)[^\n]*)/g, '<span style="color:#f87171">$1</span>')
                             .replace(/(\[AI Auto-Fix Applied\][^\n]*)/g, '<span style="color:#a78bfa">$1</span>')
                             .replace(/(⚙[^\n]*)/g, '<span style="color:#94a3b8">$1</span>')
                         }}
@@ -1245,20 +1361,6 @@ ${rerunAfterFix ? '▶ Running corrected code with Debug & Visualize...' : '✓ 
                                 Line {errorExplanation.lineNumber}
                               </span>
                             )}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => handleApplyFix(false)}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/40 border border-indigo-500/30 text-indigo-200 text-[11px] font-medium transition cursor-pointer"
-                            >
-                              <Wand2 className="w-3 h-3 text-indigo-400" /> Apply Fix
-                            </button>
-                            <button
-                              onClick={() => handleApplyFix(true)}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white text-[11px] font-semibold transition cursor-pointer"
-                            >
-                              <Play className="w-3 h-3 fill-current" /> Fix &amp; Re-run
-                            </button>
                           </div>
                         </div>
 

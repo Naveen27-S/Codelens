@@ -18,7 +18,7 @@ const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js';
 
 let pyodidePromise: Promise<any> | null = null;
 
-async function getPyodide(): Promise<any> {
+export async function getPyodide(): Promise<any> {
   if (window.pyodideInstance) {
     return window.pyodideInstance;
   }
@@ -40,7 +40,10 @@ async function getPyodide(): Promise<any> {
             reject(err);
           }
         };
-        script.onerror = () => reject(new Error('Failed to load Pyodide from CDN'));
+        script.onerror = () => {
+          pyodidePromise = null;
+          reject(new Error('Failed to load Pyodide from CDN'));
+        };
         document.head.appendChild(script);
       } else {
         const check = setInterval(() => {
