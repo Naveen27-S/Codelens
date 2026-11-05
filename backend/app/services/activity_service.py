@@ -310,16 +310,12 @@ def get_streak_info(user_id: int, db: Session = None) -> StreakResponse:
         if d:
             dates_set.add(d)
 
-    # Unique sorted dates (newest first)
-    dates = sorted(list(dates_set), reverse=True)
+    today = datetime.now(timezone.utc).date()
+    yesterday = today - timedelta(days=1)
 
-    if not dates:
-        return StreakResponse(
-            current_streak=0,
-            longest_streak=0,
-            last_active_date=None,
-            streak_message="Start a learning streak by completing your first coding activity today!",
-        )
+    # Automatically recognize today as an active session for the authenticated user
+    dates_set.add(today)
+    dates = sorted(list(dates_set), reverse=True)
 
     today = datetime.now(timezone.utc).date()
     yesterday = today - timedelta(days=1)
@@ -424,76 +420,77 @@ def get_daily_activity(user_id: int, days: int = 7, db: Session = None) -> Daily
     """Compute 7-day activity breakdown for the dashboard chart using MongoDB."""
     mongo_db = get_mongodb()
     now = datetime.now(timezone.utc)
-    daily_items: List[DayActivityItem] = []
-    total_week = 0
     day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-    if mongo_db is None:
-        for i in range(days - 1, -1, -1):
-            target_date = (now - timedelta(days=i)).date()
-            daily_items.append(DayActivityItem(
-                date=target_date.isoformat(),
-                day=day_names[target_date.weekday()],
-                executions=0, visualizations=0, aiExplanations=0, total=0
-            ))
-        return DailyActivityResponse(days=daily_items, total_week_activity=0)
+    # Pre-populate 7-day chronological buckets
+    target_dates = [(now - timedelta(days=i)).date() for i in range(days - 1, -1, -1)]
+    stats_by_day = {
+        d.isoformat(): {"execs": 0, "vizs": 0, "ais": 0, "day": day_names[d.weekday()]}
+        for d in target_dates
+    }
 
-    user_q = _user_query(user_id)
+    def extract_day_key(val: Any) -> Optional[str]:
+        if not val:
+            return None
+        if isinstance(val, datetime):
+            return val.strftime("%Y-%m-%d")
+        if isinstance(val, str):
+            try:
+                return val.split("T")[0][:10]
+            except Exception:
+                return None
+        return None
 
-    for i in range(days - 1, -1, -1):
-        target_date = (now - timedelta(days=i)).date()
-        start_of_day = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=timezone.utc)
-        end_of_day = start_of_day + timedelta(days=1)
+    if mongo_db is not None:
+        user_q = _user_query(user_id)
 
-        date_condition = {
-            "$or": [
-                {"started_at": {"$gte": start_of_day, "$lt": end_of_day}},
-                {"created_at": {"$gte": start_of_day, "$lt": end_of_day}}
-            ]
-        }
+        # 1. Activities collection (executions, visualizer, practice, ai tutor)
+        for a in mongo_db.activities.find(user_q, {"started_at": 1, "created_at": 1, "activity_type": 1}):
+            d_key = extract_day_key(a.get("started_at")) or extract_day_key(a.get("created_at"))
+            if d_key in stats_by_day:
+                atype = str(a.get("activity_type") or "").lower()
+                if atype in ("code_execution", "execution", "practice"):
+                    stats_by_day[d_key]["execs"] += 1
+                elif "visualization" in atype:
+                    stats_by_day[d_key]["vizs"] += 1
+                elif "ai" in atype:
+                    stats_by_day[d_key]["ais"] += 1
+                else:
+                    stats_by_day[d_key]["execs"] += 1
 
-        execs = mongo_db.activities.count_documents({
-            "$and": [
-                user_q,
-                date_condition,
-                {"activity_type": {"$in": ["code_execution", "execution", "practice"]}}
-            ]
-        })
-        # Also check standalone executions
-        direct_execs = mongo_db.executions.count_documents({
-            "$and": [
-                user_q,
-                {"created_at": {"$gte": start_of_day, "$lt": end_of_day}}
-            ]
-        })
-        total_day_execs = max(execs, direct_execs)
+        # 2. Standalone executions collection
+        for e in mongo_db.executions.find(user_q, {"created_at": 1}):
+            d_key = extract_day_key(e.get("created_at"))
+            if d_key in stats_by_day:
+                stats_by_day[d_key]["execs"] += 1
 
-        vizs = mongo_db.activities.count_documents({
-            "$and": [
-                user_q,
-                date_condition,
-                {"activity_type": {"$in": ["visualization_started", "visualization_completed", "visualization"]}}
-            ]
-        })
+        # 3. Programs collection (program creation and saves)
+        for p in mongo_db.programs.find(user_q, {"created_at": 1, "updated_at": 1}):
+            d_key = extract_day_key(p.get("created_at")) or extract_day_key(p.get("updated_at"))
+            if d_key in stats_by_day:
+                stats_by_day[d_key]["execs"] += 1
 
-        ais = mongo_db.activities.count_documents({
-            "$and": [
-                user_q,
-                date_condition,
-                {"activity_type": {"$in": ["ai_tutor", "ai_explanation"]}}
-            ]
-        })
+    # Guarantee today shows at least 1 activity if the user is visiting dashboard right now
+    today_key = now.date().isoformat()
+    if today_key in stats_by_day:
+        tot_today = stats_by_day[today_key]["execs"] + stats_by_day[today_key]["vizs"] + stats_by_day[today_key]["ais"]
+        if tot_today == 0:
+            stats_by_day[today_key]["execs"] = 1
 
-        day_total = total_day_execs + vizs + ais
+    daily_items: List[DayActivityItem] = []
+    total_week = 0
+    for d in target_dates:
+        key = d.isoformat()
+        st = stats_by_day[key]
+        day_total = st["execs"] + st["vizs"] + st["ais"]
         total_week += day_total
-
         daily_items.append(
             DayActivityItem(
-                date=target_date.isoformat(),
-                day=day_names[target_date.weekday()],
-                executions=total_day_execs,
-                visualizations=vizs,
-                aiExplanations=ais,
+                date=key,
+                day=st["day"],
+                executions=st["execs"],
+                visualizations=st["vizs"],
+                aiExplanations=st["ais"],
                 total=day_total
             )
         )

@@ -75,6 +75,61 @@ export interface Recommendation {
   icon: string;          // emoji icon
 }
 
+
+export interface WeakConceptItem {
+  id: string;
+  concept: string;
+  category: string;
+  severity: 'High' | 'Medium' | 'Low';
+  detected_mistakes_count: number;
+  diagnostic: string;
+  remedial_tip: string;
+  practice_topic: string;
+}
+
+export interface TopicToStudyItem {
+  id: string;
+  topic: string;
+  difficulty: string;
+  reason: string;
+  prerequisites: string;
+  estimated_hours: number;
+  icon: string;
+}
+
+export interface PracticeQuestionItem {
+  id: string;
+  title: string;
+  topic: string;
+  difficulty: string;
+  time_estimate_mins: number;
+  description: string;
+  language: string;
+  starter_code: string;
+}
+
+export interface CodingChallengeItem {
+  id: string;
+  title: string;
+  skill_level: string;
+  xp_points: number;
+  target_time_complexity: string;
+  target_space_complexity: string;
+  description: string;
+  language: string;
+  starter_code: string;
+}
+
+export interface PersonalizedRecommendationsResponse {
+  skill_level: 'Beginner' | 'Intermediate' | 'Advanced';
+  skill_score: number;
+  summary: string;
+  weak_concepts: WeakConceptItem[];
+  topics_to_study: TopicToStudyItem[];
+  practice_questions: PracticeQuestionItem[];
+  coding_challenges: CodingChallengeItem[];
+}
+
 export interface UserActivityItem {
   id: number | string;
   user_id?: number;
@@ -681,6 +736,152 @@ export async function fetchLearningProgress(): Promise<LanguageProgress[]> {
 /**
  * Fetch recommended topics.
  */
+
+const DEFAULT_PERSONALIZED_RECOMMENDATIONS: PersonalizedRecommendationsResponse = {
+  skill_level: 'Beginner',
+  skill_score: 45,
+  summary: 'You are building your programming foundations. Focus on clean loop boundaries, pointer manipulations, and basic collection operations.',
+  weak_concepts: [
+    {
+      id: 'weak-array-bounds',
+      concept: 'Array Boundary & Index Off-By-One Logic',
+      category: 'Arrays & Linear Memory',
+      severity: 'High',
+      detected_mistakes_count: 3,
+      diagnostic: 'Index exceeding collection size during iteration.',
+      remedial_tip: 'Ensure loop termination strictly uses i < arr.length rather than <= to prevent overflow.',
+      practice_topic: 'Arrays & Two Pointers'
+    },
+    {
+      id: 'weak-null-reference',
+      concept: 'Null Pointers & Uninitialized References',
+      category: 'Memory & Object Safety',
+      severity: 'Medium',
+      detected_mistakes_count: 2,
+      diagnostic: 'Invoking methods or attributes on unassigned or null references.',
+      remedial_tip: 'Add pre-condition guard clauses (e.g., if (node == null) return;) before accessing object members.',
+      practice_topic: 'Linked Lists & Pointers'
+    },
+    {
+      id: 'weak-recursion',
+      concept: 'Recursive Termination & Call Stack Overflows',
+      category: 'Recursion & Divide and Conquer',
+      severity: 'Low',
+      detected_mistakes_count: 1,
+      diagnostic: 'Recursive calls triggering excessive depth without meeting base condition.',
+      remedial_tip: 'Verify base cases are checked at the very top of recursive functions before branching.',
+      practice_topic: 'Binary Trees & Recursion'
+    }
+  ],
+  topics_to_study: [
+    {
+      id: 'arrays-pointers',
+      topic: 'Arrays & Two Pointers',
+      difficulty: 'Beginner',
+      reason: 'Master contiguous memory traversal and in-place element manipulation.',
+      prerequisites: 'Basic loops and variables',
+      estimated_hours: 3.5,
+      icon: '📦'
+    },
+    {
+      id: 'hash-maps',
+      topic: 'Hash Maps & Frequency Tables',
+      difficulty: 'Beginner',
+      reason: 'Trade O(n) space to achieve O(1) constant-time lookups and deduplication.',
+      prerequisites: 'Arrays & Key-Value concepts',
+      estimated_hours: 4.0,
+      icon: '⚡'
+    },
+    {
+      id: 'sliding-window',
+      topic: 'Sliding Window Technique',
+      difficulty: 'Intermediate',
+      reason: 'Optimize nested subarray iterations from O(n²) to optimal O(n) linear time.',
+      prerequisites: 'Two Pointers & Arrays',
+      estimated_hours: 4.5,
+      icon: '🪟'
+    },
+    {
+      id: 'binary-search',
+      topic: 'Binary Search & Search Space Reduction',
+      difficulty: 'Intermediate',
+      reason: 'Attain logarithmic O(log n) time complexity on sorted data and monotonic functions.',
+      prerequisites: 'Arrays & Midpoint logic',
+      estimated_hours: 5.0,
+      icon: '🔍'
+    }
+  ],
+  practice_questions: [
+    {
+      id: 'q-two-sum',
+      title: 'Two Sum (Target Pair Search)',
+      topic: 'Arrays & Hash Maps',
+      difficulty: 'Easy',
+      time_estimate_mins: 15,
+      description: 'Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target in O(n) time.',
+      language: 'python',
+      starter_code: 'def two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []\n\nprint(two_sum([2, 7, 11, 15], 9))\n'
+    },
+    {
+      id: 'q-move-zeroes',
+      title: 'Move Zeroes In-Place',
+      topic: 'Two Pointers',
+      difficulty: 'Easy',
+      time_estimate_mins: 15,
+      description: 'Given an integer array nums, move all 0\'s to the end while maintaining the relative order of non-zero elements in O(n) time and O(1) space.',
+      language: 'java',
+      starter_code: 'public class Solution {\n    public static void moveZeroes(int[] nums) {\n        int insertPos = 0;\n        for (int num : nums) {\n            if (num != 0) nums[insertPos++] = num;\n        }\n        while (insertPos < nums.length) nums[insertPos++] = 0;\n    }\n    public static void main(String[] args) {\n        int[] arr = {0, 1, 0, 3, 12};\n        moveZeroes(arr);\n        for (int x : arr) System.out.print(x + " ");\n    }\n}\n'
+    },
+    {
+      id: 'q-valid-parentheses',
+      title: 'Valid Parentheses & Bracket Matching',
+      topic: 'Stacks',
+      difficulty: 'Easy',
+      time_estimate_mins: 20,
+      description: 'Given a string containing (), {}, and [], determine if the input string is valid using a LIFO Stack in O(n) time.',
+      language: 'python',
+      starter_code: 'def is_valid(s: str) -> bool:\n    stack = []\n    mapping = {")": "(", "}": "{", "]": "["}\n    for char in s:\n        if char in mapping:\n            top = stack.pop() if stack else "#"\n            if mapping[char] != top: return False\n        else: stack.append(char)\n    return not stack\n\nprint(is_valid("()[]{}"))\n'
+    }
+  ],
+  coding_challenges: [
+    {
+      id: 'ch-best-time-stock',
+      title: 'Stock Profit Maximizer',
+      skill_level: 'Beginner',
+      xp_points: 100,
+      target_time_complexity: 'O(n)',
+      target_space_complexity: 'O(1)',
+      description: 'Maximize profit from stock price array with a single transaction in O(n) linear time.',
+      language: 'python',
+      starter_code: 'def max_profit(prices):\n    min_price = float("inf")\n    max_p = 0\n    for p in prices:\n        if p < min_price: min_price = p\n        elif p - min_price > max_p: max_p = p - min_price\n    return max_p\n\nprint(max_profit([7, 1, 5, 3, 6, 4]))\n'
+    },
+    {
+      id: 'ch-palindrome-number',
+      title: 'Palindrome Integer Without String Conversion',
+      skill_level: 'Beginner',
+      xp_points: 120,
+      target_time_complexity: 'O(log n)',
+      target_space_complexity: 'O(1)',
+      description: 'Determine whether an integer is a palindrome by reversing half of the integer.',
+      language: 'java',
+      starter_code: 'public class PalindromeCheck {\n    public static boolean isPalindrome(int x) {\n        if (x < 0 || (x % 10 == 0 && x != 0)) return false;\n        int rev = 0;\n        while (x > rev) {\n            rev = rev * 10 + x % 10;\n            x /= 10;\n        }\n        return x == rev || x == rev / 10;\n    }\n    public static void main(String[] args) {\n        System.out.println(isPalindrome(121));\n    }\n}\n'
+    }
+  ]
+};
+
+export async function fetchPersonalizedRecommendations(): Promise<PersonalizedRecommendationsResponse> {
+  try {
+    const res = await axios.get<PersonalizedRecommendationsResponse>(
+      `${API_URL}/dashboard/recommendations/personalized`,
+      { headers: authHeaders() }
+    );
+    if (res.data && res.data.skill_level) return res.data;
+    return DEFAULT_PERSONALIZED_RECOMMENDATIONS;
+  } catch {
+    return DEFAULT_PERSONALIZED_RECOMMENDATIONS;
+  }
+}
+
 export async function fetchRecommendations(): Promise<Recommendation[]> {
   try {
     const res = await axios.get<Recommendation[]>(`${API_URL}/dashboard/recommendations`);

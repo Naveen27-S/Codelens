@@ -19,6 +19,7 @@ from ..schemas.dashboard import (
     RecentVisualizationResponse,
     LanguageProgressResponse,
     RecommendationResponse,
+    PersonalizedRecommendationsResponse,
     CalendarActivityResponse,
     DashboardHistoryEventCreate,
     DashboardHistoryEventResponse,
@@ -376,6 +377,23 @@ def get_practice_recommendations():
         RecommendationResponse(id="sorting", topic="Sorting", difficulty="Intermediate", problems=7, icon="🔢"),
         RecommendationResponse(id="recursion", topic="Recursion", difficulty="Intermediate", problems=8, icon="🔄"),
     ]
+
+
+@router.get("/recommendations/personalized", response_model=PersonalizedRecommendationsResponse)
+def get_personalized_recommendations(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Personalized Learning Recommendation Engine.
+    Analyzes user learning history in MongoDB (activities, executions, programs, debug sessions)
+    to generate tailored:
+      - Topics to study next
+      - Weak programming concepts
+      - Practice questions
+      - Coding challenges based on skill level
+    """
+    from ..services import recommendation_service
+    return recommendation_service.generate_personalized_recommendations(user_id=current_user.id)
 
 
 # ── Dashboard History Endpoints ────────────────────────────────────────────────

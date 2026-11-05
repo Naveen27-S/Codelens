@@ -123,6 +123,60 @@ class RecommendationResponse(BaseModel):
     icon: str
 
 
+class WeakConceptItem(BaseModel):
+    id: str
+    concept: str
+    category: str
+    severity: str
+    detected_mistakes_count: int
+    diagnostic: str
+    remedial_tip: str
+    practice_topic: str
+
+
+class TopicToStudyItem(BaseModel):
+    id: str
+    topic: str
+    difficulty: str
+    reason: str
+    prerequisites: str
+    estimated_hours: float
+    icon: str
+
+
+class PracticeQuestionItem(BaseModel):
+    id: str
+    title: str
+    topic: str
+    difficulty: str
+    time_estimate_mins: int
+    description: str
+    language: str
+    starter_code: str
+
+
+class CodingChallengeItem(BaseModel):
+    id: str
+    title: str
+    skill_level: str
+    xp_points: int
+    target_time_complexity: str
+    target_space_complexity: str
+    description: str
+    language: str
+    starter_code: str
+
+
+class PersonalizedRecommendationsResponse(BaseModel):
+    skill_level: str
+    skill_score: int
+    summary: str
+    weak_concepts: List[WeakConceptItem]
+    topics_to_study: List[TopicToStudyItem]
+    practice_questions: List[PracticeQuestionItem]
+    coding_challenges: List[CodingChallengeItem]
+
+
 class CalendarDayItem(BaseModel):
     date: str   # ISO date string e.g. "2026-08-01"
     count: int  # total activities that day

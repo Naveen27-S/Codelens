@@ -39,6 +39,10 @@ import {
   type UserAccessDetails,
 } from '../services/dashboardService';
 import { recordDashboardEvent } from '../services/dashboardHistoryService';
+import { PerformanceAnalyticsCard } from '../components/dashboard/PerformanceAnalyticsCard';
+import { PersonalizedRecommendationsCard } from '../components/dashboard/PersonalizedRecommendationsCard';
+
+import { ProgramPerformanceModal } from '../components/dashboard/ProgramPerformanceModal';
 import axios from 'axios';
 import './DashboardPage.css';
 
@@ -856,6 +860,7 @@ function SavedProgramsHistoryCard({
 
   // Modal states
   const [selectedProgram, setSelectedProgram] = useState<SavedProgram | null>(null);
+  const [perfProgram, setPerfProgram] = useState<SavedProgram | null>(null);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -1075,6 +1080,23 @@ function SavedProgramsHistoryCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
+            className="sp-btn-perf-graphs"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: '#4f46e518', border: '1px solid #6366f140', color: '#818cf8',
+              borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}
+            onClick={() => {
+              const el = document.getElementById('performance-graphs');
+              el?.scrollIntoView({ behavior: 'smooth' });
+              el?.classList.add('sp-highlight-pulse');
+              setTimeout(() => el?.classList.remove('sp-highlight-pulse'), 1500);
+            }}
+          >
+            <TrendingUp size={13} /> Performance Graphs
+          </button>
+          <button
+            type="button"
             className="sp-btn-save-new"
             onClick={() => {
               setSaveError('');
@@ -1179,6 +1201,17 @@ function SavedProgramsHistoryCard({
                     </div>
                   </div>
                   <div className="sp-item-actions">
+                    <button
+                      className="sp-details-btn"
+                      title="View Performance Graph & Complexity"
+                      style={{ color: '#818cf8', borderColor: '#6366f140', background: '#6366f115' }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setPerfProgram(p);
+                      }}
+                    >
+                      <TrendingUp size={12} /> Performance
+                    </button>
                     <button
                       className="sp-details-btn"
                       title="View code, output, and details"
@@ -1390,6 +1423,17 @@ function SavedProgramsHistoryCard({
                 <button
                   type="button"
                   className="sp-btn-secondary"
+                  style={{ color: '#818cf8', borderColor: '#6366f150', background: '#6366f115' }}
+                  onClick={() => {
+                    setPerfProgram(selectedProgram);
+                  }}
+                  title="View Complexity & Performance Graph"
+                >
+                  <TrendingUp size={13} /> Performance Graph
+                </button>
+                <button
+                  type="button"
+                  className="sp-btn-secondary"
                   onClick={() => {
                     onOpenInEditor(selectedProgram, false, true);
                   }}
@@ -1411,6 +1455,15 @@ function SavedProgramsHistoryCard({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── Program Performance Graph Modal ───────────────────────────────── */}
+      {perfProgram && (
+        <ProgramPerformanceModal
+          program={perfProgram}
+          onClose={() => setPerfProgram(null)}
+          onOpenInEditor={(prog: SavedProgram) => onOpenInEditor(prog, true, false)}
+        />
       )}
 
       {/* ─── Save New Program Modal (C, C++, Java, Python) ────────────────────── */}
@@ -1818,6 +1871,25 @@ export function DashboardPage() {
   }, [loadData]);
 
   // Navigate to editor with a saved program loaded (from SavedProgramsHistory)
+  
+  const handleOpenPracticeInEditor = useCallback((code: string, language: string, title: string) => {
+    recordDashboardEvent({
+      event_type: 'practice_question_open',
+      title: `Practice: ${title}`,
+      description: `Loaded ${language} practice problem from recommendation engine.`,
+      metadata: { language, title },
+    });
+    navigate('/editor', {
+      state: {
+        code,
+        language: language.toLowerCase(),
+        programTitle: title,
+        triggerRun: false,
+        triggerVisualize: false,
+      },
+    });
+  }, [navigate]);
+
   const handleOpenSavedProgram = useCallback((p: SavedProgram, triggerRun = false, triggerVisualize = false) => {
     navigate('/editor', {
       state: {
@@ -1911,6 +1983,30 @@ export function DashboardPage() {
             </button>
             <button
               className="dash-btn-secondary"
+              onClick={() => {
+                const el = document.getElementById('performance-graphs');
+                el?.scrollIntoView({ behavior: 'smooth' });
+                el?.classList.add('sp-highlight-pulse');
+                setTimeout(() => el?.classList.remove('sp-highlight-pulse'), 1500);
+              }}
+              title="Jump to Performance Graphs & Big-O Scalability"
+            >
+              <TrendingUp size={13} style={{ color: '#818cf8' }} /> Performance Graphs
+            </button>
+            <button
+              className="dash-btn-secondary"
+              onClick={() => {
+                const el = document.getElementById('personalized-recommendations-section');
+                el?.scrollIntoView({ behavior: 'smooth' });
+                el?.classList.add('sp-highlight-pulse');
+                setTimeout(() => el?.classList.remove('sp-highlight-pulse'), 1500);
+              }}
+              title="Jump to Personalized Recommendations Engine"
+            >
+              <BrainCircuit size={13} style={{ color: '#ec4899' }} /> AI Recommendations
+            </button>
+            <button
+              className="dash-btn-secondary"
               onClick={() => loadData(true)}
               disabled={refreshing}
             >
@@ -1970,6 +2066,12 @@ export function DashboardPage() {
 
         {/* ── AI Learning Insight ────────────────────────────────────────── */}
         <AIInsightCard insight={aiInsight} onNavigate={navigate} />
+
+                {/* ── Personalized Learning Recommendation Engine (full-width) ────── */}
+        <PersonalizedRecommendationsCard onOpenQuestionInEditor={handleOpenPracticeInEditor} />
+
+        {/* ── Performance Graphs & Algorithmic Scalability (full-width) ────── */}
+        <PerformanceAnalyticsCard onOpenProgram={handleOpenSavedProgram} />
 
         {/* ── Saved Programs History (full-width) ────────────────────────── */}
         <SavedProgramsHistoryCard

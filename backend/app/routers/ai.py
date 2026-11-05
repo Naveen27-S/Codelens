@@ -3,12 +3,12 @@ from typing import Optional
 from ..schemas.ai import (
     AIExplainRequest, AIDebugRequest, AIResponse, AIVisualizeRequest,
     AIExplainErrorRequest, AIExplainCodeRequest, AIAnalyzeOutputRequest,
-    AIDebugActionRequest, AICodeExplanationResponse
+    AIDebugActionRequest, AICodeExplanationResponse, AIComplexityRequest
 )
 from ..services.ai_service import (
     explain_code, debug_code, visualize_code, verify_gemini_connection,
     explain_terminal_error, explain_code_deep, analyze_logic_output,
-    record_debug_action, get_debug_stats
+    record_debug_action, get_debug_stats, analyze_code_complexity
 )
 from jose import jwt as _jwt_lib
 import os as _os
@@ -175,3 +175,21 @@ def api_visualize_code(
 ):
     mermaid_code = visualize_code(req.language, req.code, api_key_override=x_gemini_api_key)
     return {"explanation": mermaid_code}
+
+
+@router.post("/analyze-complexity")
+@router.post("/complexity")
+def api_analyze_code_complexity(
+    req: AIComplexityRequest,
+    x_gemini_api_key: Optional[str] = Header(None)
+):
+    """
+    Analyze time and space complexity, compare alternative solutions,
+    and suggest concrete optimization techniques with performance benchmark data.
+    """
+    return analyze_code_complexity(
+        language=req.language,
+        code=req.code,
+        problem_context=req.problem_context,
+        api_key_override=x_gemini_api_key
+    )

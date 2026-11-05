@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, RotateCcw, Save, Sparkles, Terminal, Keyboard, Code, Bug, CheckCircle, AlertTriangle, X, ChevronUp, ChevronDown, Trash2, GripHorizontal } from 'lucide-react';
+import { Play, RotateCcw, Save, Sparkles, Terminal, Keyboard, Code, CheckCircle, AlertTriangle, X, ChevronUp, ChevronDown, Trash2, GripHorizontal, Zap } from 'lucide-react';
 import axios from 'axios';
 import { useSettings } from '../context/SettingsContext';
 import { recordUserActivity, recordSessionTime } from '../services/dashboardService';
@@ -249,7 +249,28 @@ export function EditorPage() {
 
   const [isRunning, setIsRunning] = useState(false);
   const [isVisualizing, setIsVisualizing] = useState(false);
+  const [visualizerTab, setVisualizerTab] = useState<'structures' | 'variables' | 'flowchart' | 'complexity'>('structures');
   const lastActionRef = useRef<'run' | 'visualize'>('run');
+
+  const handleOpenComplexityAnalyzer = () => {
+    setShowViz(true);
+    setVisualizerTab('complexity');
+    addToast('ai', 'Complexity Analyzer Ready', 'Analyzing Time & Space Complexity and Alternative Solutions.');
+  };
+
+  const handleApplyAlternativeSolution = (newCode: string) => {
+    setCodeByLanguage((prev) => ({
+      ...prev,
+      [language]: newCode,
+      ...(activeProblem ? { [`problem_${activeProblem.id}_${language}`]: newCode } : {}),
+    }));
+
+    if (editorRef.current) {
+      editorRef.current.setValue(newCode);
+    }
+
+    addToast('success', 'Alternative Solution Applied', 'Loaded alternative code into editor. Ready to run or analyze.');
+  };
 
 
   // Active practice & platform accessing time tracking
@@ -781,6 +802,7 @@ export function EditorPage() {
   // 100% Client-Side Debug & Visualization Handler
   const handleVisualizeCode = async (overrideCode?: string, overrideLang?: string, overrideInput?: string) => {
     lastActionRef.current = 'visualize';
+    setVisualizerTab('structures');
     const langToViz = (overrideLang !== undefined ? overrideLang : language).toLowerCase();
     const codeToViz = overrideCode !== undefined ? overrideCode : currentCode;
     const inputToUse = overrideInput !== undefined ? overrideInput : stdin;
@@ -1152,12 +1174,12 @@ export function EditorPage() {
             <RotateCcw className="w-3.5 h-3.5" /> Reset
           </button>
           <button
-            onClick={() => handleVisualizeCode()}
-            disabled={isVisualizing || isRunning}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 text-white rounded-lg transition-colors text-xs font-semibold shadow-md shadow-emerald-600/20 cursor-pointer"
+            onClick={handleOpenComplexityAnalyzer}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg transition-colors text-xs font-semibold cursor-pointer shadow-sm"
+            title="Analyze Time & Space Complexity, Alternative Solutions & Optimization Techniques"
           >
-            <Bug className="w-3.5 h-3.5" />
-            {isVisualizing ? 'Debugging...' : 'Debug & Visualize'}
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>Complexity &amp; Perf</span>
           </button>
           <button
             onClick={() => handleRunCode()}
@@ -1428,6 +1450,8 @@ export function EditorPage() {
               code={currentCode}
               errorExplanation={errorExplanation}
               onApplyFix={handleApplyFix}
+              initialTab={visualizerTab}
+              onApplySolution={handleApplyAlternativeSolution}
             />
           </div>
         )}

@@ -12,10 +12,11 @@ import { VisualizerErrorBoundary } from './VisualizerErrorBoundary';
 import { VariableInspector } from './VariableInspector';
 import { PlaybackControls } from './PlaybackControls';
 import { MermaidViewer } from '../MermaidViewer';
-import { Variable, Network, Activity, Play, AlertTriangle, Sparkles, ArrowRight } from 'lucide-react';
+import { Variable, Network, Activity, Play, AlertTriangle, Sparkles, ArrowRight, Zap } from 'lucide-react';
 import { voiceNarrator } from '../../services/voiceNarrator';
 import { getStepExplanation, getCodeOverviewExplanation } from '../../utils/stepExplainer';
 import { useSettings } from '../../context/SettingsContext';
+import { ComplexityAnalyzerPanel } from './ComplexityAnalyzerPanel';
 
 interface Props {
   executionResult?: ExecutionResult | null;
@@ -33,6 +34,8 @@ interface Props {
     offendingLine?: string;
   } | null;
   onApplyFix?: (rerun?: boolean, forceVisualize?: boolean) => void;
+  initialTab?: 'structures' | 'variables' | 'flowchart' | 'complexity';
+  onApplySolution?: (newCode: string) => void;
 }
 
 export const VisualizerPanel: React.FC<Props> = ({
@@ -43,9 +46,17 @@ export const VisualizerPanel: React.FC<Props> = ({
   code = '',
   errorExplanation,
   onApplyFix,
+  initialTab,
+  onApplySolution,
 }) => {
   const { settings } = useSettings();
-  const [activeTab, setActiveTab] = useState<'structures' | 'variables' | 'flowchart'>('structures');
+  const [activeTab, setActiveTab] = useState<'structures' | 'variables' | 'flowchart' | 'complexity'>(initialTab || 'structures');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [currentStepIndex, setCurrentStepIndex] = useState(1);
   const [isPlaying, setIsPlaying] = useState(false);
   const isPlayingRef = React.useRef(false);
@@ -303,6 +314,17 @@ export const VisualizerPanel: React.FC<Props> = ({
             }`}
           >
             <Network className="w-3.5 h-3.5" /> Flowchart
+          </button>
+
+          <button
+            onClick={() => setActiveTab('complexity')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition cursor-pointer ${
+              activeTab === 'complexity'
+                ? 'bg-indigo-600 text-white font-medium shadow-sm shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-400" /> Complexity &amp; Perf
           </button>
         </div>
       </div>
@@ -563,10 +585,21 @@ export const VisualizerPanel: React.FC<Props> = ({
           </div>
         )}
 
+        {/* ── Complexity & Performance Analyzer ─── */}
+        {activeTab === 'complexity' && (
+          <div className="w-full h-full overflow-hidden">
+            <ComplexityAnalyzerPanel
+              sourceCode={code}
+              language={language}
+              onApplySolution={onApplySolution}
+            />
+          </div>
+        )}
+
       </div>
 
-      {/* ─── Bottom Playback Toolbar ────────────────────────────────────── */}
-      {totalSteps > 0 && (
+      {/* ─── Bottom Playback Toolbar (Only show when on Video Visualizer tab) ─── */}
+      {totalSteps > 0 && activeTab === 'structures' && (
         <div className="shrink-0">
           <PlaybackControls
             currentStepIndex={currentStepIndex}
